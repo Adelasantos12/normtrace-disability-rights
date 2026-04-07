@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Jurisdiction {
+  MEXICO
+  SWITZERLAND
+}
+
+enum LegalLevel {
+  FEDERAL
+  CANTONAL
+}
+
+enum OutputLanguage {
+  EN
+  ES
+  FR
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  analyses    AnalysisRun[]
+}
+
+model AnalysisRun {
+  id             String         @id @default(uuid())
+  projectId      String?
+  project        Project?       @relation(fields: [projectId], references: [id])
+  jurisdiction   Jurisdiction
+  legalLevel     LegalLevel?
+  outputLanguage OutputLanguage
+  status         String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  sourceDocument     SourceDocument?
+  structuredFindings StructuredFinding[]
+  gapRecords         GapRecord[]
+  actorRecords       ActorRecord[]
+  argumentRecords    ArgumentRecord[]
+}
+
+model SourceDocument {
+  id                 String      @id @default(uuid())
+  analysisRunId      String      @unique
+  analysisRun        AnalysisRun @relation(fields: [analysisRunId], references: [id])
+  sourceType         String      // TEXT, PDF
+  content            String?
+  metadata           Json?
+  versionDate        String?
+  completenessStatus String?
+}
+
+model StructuredFinding {
+  id                    String      @id @default(uuid())
+  analysisRunId         String
+  analysisRun           AnalysisRun @relation(fields: [analysisRunId], references: [id])
+  mainProblem           String?
+  gapType               String?
+  likelyRemedialLevel   String?
+  methodologicalCaution String?
+}
+
+model GapRecord {
+  id                String      @id @default(uuid())
+  analysisRunId     String
+  analysisRun       AnalysisRun @relation(fields: [analysisRunId], references: [id])
+  standardEngaged   String?
+  severity          String?
+  interpretiveBasis String?
+  caution           String?
+}
+
+model ActorRecord {
+  id                 String      @id @default(uuid())
+  analysisRunId      String
+  analysisRun        AnalysisRun @relation(fields: [analysisRunId], references: [id])
+  actorName          String?
+  role               String?
+  responsibilityFlow String?
+  enforceability     String?
+}
+
+model ArgumentRecord {
+  id               String      @id @default(uuid())
+  analysisRunId    String
+  analysisRun      AnalysisRun @relation(fields: [analysisRunId], references: [id])
+  legalProblem     String?
+  standardEngaged  String?
+  deficiencyType   String?
+  doctrinalSupport String?
+  remedialPathway  String?
+}

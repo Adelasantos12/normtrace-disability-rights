@@ -11,7 +11,6 @@
   "dependencies": {
     "@normtrace/i18n": "*",
     "@normtrace/ui": "*",
-    "@tailwindcss/postcss": "^4.2.2",
     "next": "14.2.3",
     "react": "^18",
     "react-dom": "^18"
@@ -20,11 +19,12 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.27",
     "eslint": "^8",
     "eslint-config-next": "14.2.3",
     "jiti": "^1.21.7",
     "postcss": "^8.5.8",
-    "tailwindcss": "^4.2.2",
+    "tailwindcss": "^3.4.19",
     "typescript": "^5"
   }
 }

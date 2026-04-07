@@ -14,7 +14,6 @@
     "dev": "npm run build --workspaces --if-present && npm run dev --workspaces --if-present"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.2.2",
     "jiti": "^2.6.1"
   }
 }

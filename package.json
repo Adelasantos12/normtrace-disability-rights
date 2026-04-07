@@ -1,0 +1,17 @@
+{
+  "name": "normtrace",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run build --workspaces --if-present && npm run dev --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "jiti": "^2.6.1"
+  }
+}

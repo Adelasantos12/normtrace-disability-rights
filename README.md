@@ -57,16 +57,17 @@ This application is designed for seamless deployment on Railway using a Monorepo
 
 #### API Service Configuration
 - **Root Directory**: `/` (Leave empty to use monorepo context)
-- **Build Command**: `npm run build`
+- **Build Command**: `npm run build:api`
 - **Start Command**: `cd apps/api && npm run start`
 - **Healthcheck Path**: `/health`
 - **Environment Variables**:
   - `DATABASE_URL`: Ensure this links to the provisioned PostgreSQL add-on.
+  - `GEMINI_API_KEY`: Used by the AI orchestration service.
 
 #### Web Service Configuration
-- **Root Directory**: `/apps/web`
-- **Build Command**: `npm run build`
-- **Start Command**: `npm run start`
+- **Root Directory**: `/` (Leave empty to use monorepo context)
+- **Build Command**: `npm run build:web`
+- **Start Command**: `cd apps/web && npm run start`
 
 ---
 *Note: This pilot system must not be mistaken for an automated constitutional court. Outputs are analytical and require source verification.*

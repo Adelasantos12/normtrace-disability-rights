@@ -16,6 +16,7 @@ export default function NewAnalysisPage() {
   const [legalLevel, setLegalLevel] = useState<"FEDERAL" | "CANTONAL" | "">("");
   const [language, setLanguage] = useState<"EN" | "ES" | "FR">("EN");
   const [sourceText, setSourceText] = useState("");
+  const [pdfFileName, setPdfFileName] = useState("");
   const [versionDate, setVersionDate] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +54,7 @@ export default function NewAnalysisPage() {
       }
 
       setSourceText(fullText);
+      setPdfFileName(file.name);
     } catch (error) {
       console.error("Error reading PDF:", error);
       alert("Failed to read PDF file.");
@@ -72,8 +74,8 @@ export default function NewAnalysisPage() {
 
     try {
       setIsLoading(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      const response = await fetch(`${apiUrl}/api/analyses`, {
+      // Use the rewritten /api path which proxies to the backend
+      const response = await fetch(`/api/analyses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -160,33 +162,55 @@ export default function NewAnalysisPage() {
 
             <div className="border-t border-neutral-200 pt-6">
               <label className="block text-sm font-medium mb-2">Source Input</label>
-              <textarea
-                className="w-full border border-neutral-300 rounded p-3 text-sm h-48 bg-white mb-2"
-                placeholder="Paste the text of the legal instrument here..."
-                value={sourceText}
-                onChange={(e) => setSourceText(e.target.value)}
-              />
 
-              <div className="flex items-center gap-4 mt-2">
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  ref={fileInputRef}
-                  className="hidden"
-                  onChange={handlePdfUpload}
+              {pdfFileName ? (
+                <div className="w-full border border-green-200 bg-green-50 rounded p-4 text-sm mb-4 flex justify-between items-center">
+                  <div>
+                    <span className="text-green-800 font-medium block">✓ PDF Loaded Successfully</span>
+                    <span className="text-green-700 mt-1 block">{pdfFileName} ({sourceText.length} characters extracted)</span>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setPdfFileName("");
+                      setSourceText("");
+                    }}
+                    className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 text-xs py-1"
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ) : (
+                <textarea
+                  className="w-full border border-neutral-300 rounded p-3 text-sm h-48 bg-white mb-2"
+                  placeholder="Paste the text of the legal instrument here..."
+                  value={sourceText}
+                  onChange={(e) => setSourceText(e.target.value)}
                 />
-                <Button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="bg-institutional-600 text-white hover:bg-institutional-700 text-sm py-1.5"
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Processing...' : 'Upload PDF'}
-                </Button>
-                <p className="text-xs text-neutral-500">
-                  Extracts text automatically from uploaded PDFs.
-                </p>
-              </div>
+              )}
+
+              {!pdfFileName && (
+                <div className="flex items-center gap-4 mt-2">
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    ref={fileInputRef}
+                    className="hidden"
+                    onChange={handlePdfUpload}
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="bg-institutional-600 text-white hover:bg-institutional-700 text-sm py-1.5"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Processing...' : 'Upload PDF'}
+                  </Button>
+                  <p className="text-xs text-neutral-500">
+                    Extracts text automatically from uploaded PDFs.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div>

@@ -28,8 +28,7 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
   useEffect(() => {
     const fetchAnalysis = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-        const res = await fetch(`${apiUrl}/api/analyses/${params.id}`);
+        const res = await fetch(`/api/analyses/${params.id}`);
         if (!res.ok) throw new Error("Failed to load analysis");
         const data = await res.json();
         setAnalysis(data.analysis);

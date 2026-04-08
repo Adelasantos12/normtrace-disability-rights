@@ -106,9 +106,12 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
           )}
 
           <Card>
-            <h3 className="font-medium mb-4">General Caution</h3>
-            <p className="text-sm text-neutral-600 leading-relaxed">
+            <h3 className="font-medium mb-4 text-amber-800">General Caution</h3>
+            <p className="text-sm text-neutral-600 leading-relaxed mb-4">
               This analysis evaluates the formal properties, enforceability structure, and normative alignment of the text against the CRPD. It uses a cautious approach. Outputs require source verification and are strictly analytical.
+            </p>
+            <p className="text-xs text-neutral-500 italic border-l-2 border-amber-300 pl-3">
+              These outputs are analytical and indicative. For high-stakes use—such as litigation, legislative reform, advocacy strategy, official reporting, or institutional decision-making—findings should be reviewed against primary legal sources and, where necessary, complemented by detailed expert analysis.
             </p>
           </Card>
         </div>

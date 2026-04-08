@@ -16,3 +16,9 @@
  ✓ Compiled / in 447ms (529 modules)
  GET / 200 in 684ms
  ✓ Compiled /analyses/new in 275ms (286 modules)
+ ✓ Compiled in 3.3s (546 modules)
+ ✓ Compiled in 281ms (269 modules)
+ ✓ Compiled in 155ms (269 modules)
+ ○ Compiling / ...
+ ✓ Compiled / in 511ms (286 modules)
+ GET / 200 in 956ms

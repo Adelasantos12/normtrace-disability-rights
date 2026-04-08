@@ -14,7 +14,7 @@ const prisma = new PrismaClient();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' })); // Allow large text submissions
+app.use(express.json({ limit: '100mb' })); // Allow large text submissions
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -65,7 +65,7 @@ app.post('/api/analyses', async (req, res) => {
           }
 
           Text to analyze:
-          ${sourceText.substring(0, 30000)} // Truncating for pilot safety
+          ${sourceText.substring(0, 1000000)} // Gemini 1.5 Pro can handle up to 1M-2M tokens
         `;
 
         const result = await model.generateContent(prompt);

@@ -1,25 +1,85 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { Button, Card } from "@normtrace/ui";
 import { useRouter } from "next/navigation";
-
 export default function NewAnalysisPage() {
   const router = useRouter();
   const [jurisdiction, setJurisdiction] = useState<"MEXICO" | "SWITZERLAND" | "">("");
   const [legalLevel, setLegalLevel] = useState<"FEDERAL" | "CANTONAL" | "">("");
   const [language, setLanguage] = useState<"EN" | "ES" | "FR">("EN");
+  const [sourceText, setSourceText] = useState("");
+  const [versionDate, setVersionDate] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsLoading(true);
+      // Use dynamic import to avoid SSR issues
+      const pdfjsLib = await import('pdfjs-dist');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = "";
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item: any) => item.str).join(" ");
+        fullText += pageText + "\n";
+      }
+
+      setSourceText(fullText);
+    } catch (error) {
+      console.error("Error reading PDF:", error);
+      alert("Failed to read PDF file.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!jurisdiction) return;
     if (jurisdiction === "SWITZERLAND" && !legalLevel) return;
+    if (!sourceText.trim()) {
+      alert("Please provide the source text or upload a PDF.");
+      return;
+    }
 
-    // In a real implementation, this would POST to the API to start an analysis.
-    // For now, we simulate redirecting to a created analysis record.
-    const fakeId = "run-" + Date.now();
-    router.push(`/analyses/${fakeId}`);
+    try {
+      setIsLoading(true);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const response = await fetch(`${apiUrl}/api/analyses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jurisdiction,
+          legalLevel: jurisdiction === "SWITZERLAND" ? legalLevel : undefined,
+          language,
+          sourceText,
+          versionDate
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to start analysis");
+      }
+
+      const data = await response.json();
+      router.push(`/analyses/${data.analysisId}`);
+    } catch (error) {
+      console.error("Submission error:", error);
+      alert("Error starting analysis.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -83,12 +143,32 @@ export default function NewAnalysisPage() {
             <div className="border-t border-neutral-200 pt-6">
               <label className="block text-sm font-medium mb-2">Source Input</label>
               <textarea
-                className="w-full border border-neutral-300 rounded p-3 text-sm h-48 bg-white"
+                className="w-full border border-neutral-300 rounded p-3 text-sm h-48 bg-white mb-2"
                 placeholder="Paste the text of the legal instrument here..."
+                value={sourceText}
+                onChange={(e) => setSourceText(e.target.value)}
               />
-              <p className="mt-2 text-xs text-neutral-500">
-                Alternatively, upload a PDF (functionality stubbed for pilot).
-              </p>
+
+              <div className="flex items-center gap-4 mt-2">
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  ref={fileInputRef}
+                  className="hidden"
+                  onChange={handlePdfUpload}
+                />
+                <Button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-institutional-600 text-white hover:bg-institutional-700 text-sm py-1.5"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Processing...' : 'Upload PDF'}
+                </Button>
+                <p className="text-xs text-neutral-500">
+                  Extracts text automatically from uploaded PDFs.
+                </p>
+              </div>
             </div>
 
             <div>
@@ -97,6 +177,8 @@ export default function NewAnalysisPage() {
                 type="text"
                 className="w-full border border-neutral-300 rounded p-2 text-sm bg-white"
                 placeholder="e.g. As amended on 24 May 2023"
+                value={versionDate}
+                onChange={(e) => setVersionDate(e.target.value)}
               />
             </div>
           </div>
@@ -107,7 +189,9 @@ export default function NewAnalysisPage() {
         </div>
 
         <div className="flex justify-end">
-          <Button type="submit" className="px-8 py-3">Run Analysis</Button>
+          <Button type="submit" className="px-8 py-3 bg-institutional-900 hover:bg-institutional-800" disabled={isLoading}>
+            {isLoading ? "Starting Analysis..." : "Run Analysis"}
+          </Button>
         </div>
       </form>
     </div>

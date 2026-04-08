@@ -92,29 +92,21 @@ Error: listen EADDRINUSE: address already in use :::4000
     at node:internal/modules/cjs/loader:1838:10
     at require.extensions..jsx.require.extensions..js (/tmp/ts-node-dev-hook-428066605891408.js:114:20)
 [ERROR] 17:58:27 Error: listen EADDRINUSE: address already in use :::4000
-ied
-API server listening on port 4000
-Error starting analysis: PrismaClientInitializationError:
-Invalid `prisma.analysisRun.create()` invocation in
-/app/apps/api/src/index.ts:32:50
-
-  29 }
-  30
-  31 // 1. Create initial DB record
-→ 32 const analysisRun = await prisma.analysisRun.create(
-error: Environment variable not found: DATABASE_URL.
-  -->  schema.prisma:7
-   |
- 6 |   provider = "postgresql"
- 7 |   url      = env("DATABASE_URL")
-   |
-
-Validation Error Count: 1
-    at $n.handleRequestError (/app/node_modules/@prisma/client/runtime/library.js:121:7615)
-    at $n.handleAndLogRequestError (/app/node_modules/@prisma/client/runtime/library.js:121:6623)
-    at $n.request (/app/node_modules/@prisma/client/runtime/library.js:121:6307)
-    at l (/app/node_modules/@prisma/client/runtime/library.js:130:9633)
-    at /app/apps/api/src/index.ts:32:25 {
-  clientVersion: '5.22.0',
+[INFO] 18:26:23 Restarting: /app/apps/api/src/index.ts has been modified
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at Function.listen (/app/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/app/apps/api/src/index.ts:156:5)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1705:14)
+    at Module._compile (/app/node_modules/source-map-support/source-map-support.js:568:25)
+    at Module.m._compile (/tmp/ts-node-dev-hook-428066605891408.js:69:33)
+    at node:internal/modules/cjs/loader:1838:10
+    at require.extensions..jsx.require.extensions..js (/tmp/ts-node-dev-hook-428066605891408.js:114:20)
+[ERROR] 18:26:25 Error: listen EADDRINUSE: address already in use :::4000
+on: '5.22.0',
   errorCode: undefined
 }
+[INFO] 18:26:23 Restarting: /app/apps/api/src/index.ts has been modified
+API server listening on port 4000

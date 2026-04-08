@@ -112,9 +112,10 @@ app.post('/api/analyses', async (req, res) => {
       analysisId: analysisRun.id
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error starting analysis:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    // Return the actual error message so the frontend can display it for debugging
+    res.status(500).json({ error: `Internal server error: ${error.message || 'Unknown database or server error'}` });
   }
 });
 

@@ -8,18 +8,8 @@
  ✓ Starting...
  ✓ Ready in 3.9s
  ○ Compiling /analyses/new ...
- ✓ Compiled /analyses/new in 6.7s (554 modules)
- HEAD /analyses/new 200 in 7111ms
- ✓ Compiled in 265ms (268 modules)
- ✓ Compiled in 429ms (268 modules)
- ✓ Compiled in 278ms (268 modules)
- ✓ Compiled / in 447ms (529 modules)
- GET / 200 in 684ms
- ✓ Compiled /analyses/new in 275ms (286 modules)
- ✓ Compiled in 3.3s (546 modules)
- ✓ Compiled in 281ms (269 modules)
- ✓ Compiled in 155ms (269 modules)
+ ✓ Compiled /analyses/new in 5.1s (551 modules)
+ GET /analyses/new 200 in 5510ms
  ○ Compiling / ...
- ✓ Compiled / in 511ms (286 modules)
- GET / 200 in 956ms
- ✓ Compiled in 318ms (269 modules)
+ ✓ Compiled / in 757ms (552 modules)
+ GET / 200 in 1031ms

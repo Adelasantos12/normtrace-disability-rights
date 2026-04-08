@@ -4,6 +4,12 @@ import { useState, useRef } from "react";
 import Link from "next/link";
 import { Button, Card } from "@normtrace/ui";
 import { useRouter } from "next/navigation";
+declare global {
+  interface Window {
+    pdfjsLib: any;
+  }
+}
+
 export default function NewAnalysisPage() {
   const router = useRouter();
   const [jurisdiction, setJurisdiction] = useState<"MEXICO" | "SWITZERLAND" | "">("");
@@ -20,12 +26,23 @@ export default function NewAnalysisPage() {
 
     try {
       setIsLoading(true);
-      // Use dynamic import to avoid SSR issues
-      const pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+      // Load pdfjs via script tag to bypass Next.js webpack compilation issues with the library
+      if (!window.pdfjsLib) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+          script.onload = () => {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            resolve(true);
+          };
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
 
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let fullText = "";
 
       for (let i = 1; i <= pdf.numPages; i++) {
@@ -69,14 +86,15 @@ export default function NewAnalysisPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to start analysis");
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || "Failed to start analysis (API returned an error)");
       }
 
       const data = await response.json();
       router.push(`/analyses/${data.analysisId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Submission error:", error);
-      alert("Error starting analysis.");
+      alert(`Error starting analysis: ${error.message || "Please check your network and database connection."}`);
     } finally {
       setIsLoading(false);
     }

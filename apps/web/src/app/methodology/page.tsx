@@ -42,13 +42,13 @@ export default function MethodologyPage() {
         </section>
 
         <section>
-          <h2 className="text-2xl font-medium mb-4">Contact / Request Expert Analysis</h2>
+          <h2 className="text-2xl font-medium mb-4">Contact / Enquiries</h2>
           <div className="prose text-neutral-700 max-w-none">
             <p>
-              Are you a think tank, NGO, activist, parliamentary office, research centre, or legal practitioner? If you require detailed, expert analysis beyond the automated outputs provided by NormTrace, please get in touch with us.
+              For research, methodological, or collaboration enquiries regarding NormTrace, please contact:
             </p>
             <p className="mt-2 font-medium">
-              Contact Email: <a href="mailto:[INSERT EMAIL]" className="text-blue-600 hover:underline">[INSERT EMAIL]</a>
+              <a href="mailto:adela.santos@graduateinstitute.ch" className="text-blue-600 hover:underline">adela.santos@graduateinstitute.ch</a>
             </p>
           </div>
         </section>

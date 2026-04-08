@@ -164,53 +164,67 @@ export default function NewAnalysisPage() {
               <label className="block text-sm font-medium mb-2">Source Input</label>
 
               {pdfFileName ? (
-                <div className="w-full border border-green-200 bg-green-50 rounded p-4 text-sm mb-4 flex justify-between items-center">
-                  <div>
-                    <span className="text-green-800 font-medium block">✓ PDF Loaded Successfully</span>
-                    <span className="text-green-700 mt-1 block">{pdfFileName} ({sourceText.length} characters extracted)</span>
+                <div className="space-y-3">
+                  <div className="w-full border border-green-200 bg-green-50 rounded p-3 text-sm flex justify-between items-center shadow-sm">
+                    <div>
+                      <span className="text-green-800 font-medium block">✓ PDF Extracted Successfully</span>
+                      <span className="text-green-700 block text-xs mt-0.5">{pdfFileName} ({sourceText.length.toLocaleString()} characters)</span>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setPdfFileName("");
+                        setSourceText("");
+                      }}
+                      className="bg-white text-red-600 hover:bg-red-50 border border-red-200 text-xs py-1.5 px-3 transition-colors"
+                    >
+                      Clear PDF
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      setPdfFileName("");
-                      setSourceText("");
-                    }}
-                    className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 text-xs py-1"
-                  >
-                    Remove
-                  </Button>
+
+                  <div className="border border-neutral-200 rounded-md overflow-hidden flex flex-col">
+                    <div className="bg-neutral-50 border-b border-neutral-200 px-3 py-2 flex justify-between items-center">
+                      <span className="text-xs font-medium text-neutral-600 uppercase tracking-wider">Document Preview</span>
+                      <span className="text-xs text-neutral-400">Read-only view</span>
+                    </div>
+                    <div className="bg-white p-4 h-48 overflow-y-auto">
+                      <p className="text-sm text-neutral-700 whitespace-pre-wrap leading-relaxed font-serif">
+                        {sourceText || "No text extracted."}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ) : (
-                <textarea
-                  className="w-full border border-neutral-300 rounded p-3 text-sm h-48 bg-white mb-2"
-                  placeholder="Paste the text of the legal instrument here..."
-                  value={sourceText}
-                  onChange={(e) => setSourceText(e.target.value)}
-                />
-              )}
-
-              {!pdfFileName && (
-                <div className="flex items-center gap-4 mt-2">
-                  <input
-                    type="file"
-                    accept="application/pdf"
-                    ref={fileInputRef}
-                    className="hidden"
-                    onChange={handlePdfUpload}
+                <div className="mb-2">
+                  <textarea
+                    className="w-full border border-neutral-300 rounded p-3 text-sm h-48 bg-white focus:ring-2 focus:ring-institutional-500 focus:border-institutional-500 outline-none transition-shadow"
+                    placeholder="Paste the text of the legal instrument here..."
+                    value={sourceText}
+                    onChange={(e) => setSourceText(e.target.value)}
                   />
-                  <Button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="bg-institutional-600 text-white hover:bg-institutional-700 text-sm py-1.5"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Processing...' : 'Upload PDF'}
-                  </Button>
-                  <p className="text-xs text-neutral-500">
-                    Extracts text automatically from uploaded PDFs.
-                  </p>
                 </div>
               )}
+
+              <div className="flex items-center gap-4 mt-2">
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  ref={fileInputRef}
+                  className="hidden"
+                  onChange={handlePdfUpload}
+                />
+                <Button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-neutral-100 text-neutral-800 hover:bg-neutral-200 border border-neutral-300 text-sm py-1.5"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Processing PDF...' : 'Upload PDF'}
+                </Button>
+                <p className="text-xs text-neutral-500">
+                  Alternatively, upload a PDF to automatically extract its text.
+                </p>
+              </div>
             </div>
 
             <div>

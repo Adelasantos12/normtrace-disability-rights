@@ -11,13 +11,9 @@
     "build": "npm run build --workspaces --if-present",
     "build:api": "npm run build -w @normtrace/i18n -w @normtrace/api --if-present",
     "build:web": "npm run build -w @normtrace/ui -w @normtrace/i18n -w @normtrace/web --if-present",
-    "dev": "npm run build --workspaces --if-present && npm run dev --workspaces --if-present",
-    "start": "concurrently \"npm run start -w @normtrace/api\" \"npm run start -w @normtrace/web\""
+    "dev": "npm run build --workspaces --if-present && npm run dev --workspaces --if-present"
   },
   "devDependencies": {
     "jiti": "^2.6.1"
-  },
-  "dependencies": {
-    "concurrently": "^9.2.1"
   }
 }

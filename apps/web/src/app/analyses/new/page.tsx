@@ -88,8 +88,14 @@ export default function NewAnalysisPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error || "Failed to start analysis (API returned an error)");
+        let errorMsg = "Failed to start analysis (API returned an error)";
+        try {
+          const errorData = await response.json();
+          if (errorData?.error) errorMsg = errorData.error;
+        } catch (e) {
+          errorMsg = `Server responded with status: ${response.status}`;
+        }
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
@@ -197,34 +203,33 @@ export default function NewAnalysisPage() {
               ) : (
                 <div className="mb-2">
                   <textarea
-                    className="w-full border border-neutral-300 rounded p-3 text-sm h-48 bg-white focus:ring-2 focus:ring-institutional-500 focus:border-institutional-500 outline-none transition-shadow"
+                    className="w-full border border-neutral-300 rounded p-3 text-sm h-48 bg-white focus:ring-2 focus:ring-neutral-500 focus:border-neutral-500 outline-none transition-shadow"
                     placeholder="Paste the text of the legal instrument here..."
                     value={sourceText}
                     onChange={(e) => setSourceText(e.target.value)}
                   />
+                  <div className="flex items-center gap-4 mt-2">
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      ref={fileInputRef}
+                      className="hidden"
+                      onChange={handlePdfUpload}
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="bg-neutral-100 text-neutral-800 hover:bg-neutral-200 border border-neutral-300 text-sm py-1.5"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Processing PDF...' : 'Upload PDF'}
+                    </Button>
+                    <p className="text-xs text-neutral-500">
+                      Alternatively, upload a PDF to automatically extract its text.
+                    </p>
+                  </div>
                 </div>
               )}
-
-              <div className="flex items-center gap-4 mt-2">
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  ref={fileInputRef}
-                  className="hidden"
-                  onChange={handlePdfUpload}
-                />
-                <Button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="bg-neutral-100 text-neutral-800 hover:bg-neutral-200 border border-neutral-300 text-sm py-1.5"
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Processing PDF...' : 'Upload PDF'}
-                </Button>
-                <p className="text-xs text-neutral-500">
-                  Alternatively, upload a PDF to automatically extract its text.
-                </p>
-              </div>
             </div>
 
             <div>

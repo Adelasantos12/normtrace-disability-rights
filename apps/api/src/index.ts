@@ -14,10 +14,7 @@ const prisma = new PrismaClient();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const configuredGeminiModel = process.env.GEMINI_MODEL?.trim();
 
-const extractModelId = (name: string) => name.replace(/^models\//, '');
-
-async function resolveGeminiModel() {
-  const priorityModels = [
+const candidateGeminiModels = [
     configuredGeminiModel,
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
@@ -27,27 +24,29 @@ async function resolveGeminiModel() {
     'gemini-1.5-pro',
   ].filter((model): model is string => Boolean(model));
 
-  try {
-    const { models = [] } = await genAI.listModels();
-    const supportedModels = models
-      .filter((model) => model.supportedGenerationMethods?.includes('generateContent'))
-      .map((model) => extractModelId(model.name || ''))
-      .filter(Boolean);
+function isNotFoundModelError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('404') || message.toLowerCase().includes('not found');
+}
 
-    for (const model of priorityModels) {
-      if (supportedModels.includes(model)) {
-        return model;
+async function generateWithModelFallback(prompt: string) {
+  let lastError: unknown = null;
+
+  for (const modelName of candidateGeminiModels) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      return { modelName, responseText: result.response.text() };
+    } catch (error) {
+      lastError = error;
+      if (!isNotFoundModelError(error)) {
+        throw error;
       }
+      console.warn(`Gemini model unavailable for generateContent: ${modelName}`);
     }
-
-    if (supportedModels.length > 0) {
-      return supportedModels[0];
-    }
-  } catch (error) {
-    console.warn('Gemini model discovery failed. Falling back to priority defaults.', error);
   }
 
-  return priorityModels[0] || 'gemini-1.5-pro-latest';
+  throw lastError || new Error('No compatible Gemini model available.');
 }
 
 app.use(cors());
@@ -85,11 +84,8 @@ app.post('/api/analyses', async (req, res) => {
     // 2. Perform Gemini Analysis (asynchronous, but we await for simplicity in pilot)
     // In production, this would be queued (e.g., BullMQ)
     if (process.env.GEMINI_API_KEY) {
-      let geminiModel = configuredGeminiModel || 'auto-discovery';
+      let geminiModel = configuredGeminiModel || candidateGeminiModels[0] || 'unknown';
       try {
-        geminiModel = await resolveGeminiModel();
-        const model = genAI.getGenerativeModel({ model: geminiModel });
-
         const prompt = `
           Perform a normative analysis on the following legal text for jurisdiction: ${jurisdiction}.
           Legal Level: ${legalLevel || 'N/A'}.
@@ -107,8 +103,9 @@ app.post('/api/analyses', async (req, res) => {
           ${sourceText.substring(0, 30000)}
         `;
 
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
+        const generation = await generateWithModelFallback(prompt);
+        geminiModel = generation.modelName;
+        const responseText = generation.responseText;
 
         // Clean up markdown code blocks if Gemini returns them
         const jsonStr = responseText.replace(/```json\n?|\n?```/g, '').trim();

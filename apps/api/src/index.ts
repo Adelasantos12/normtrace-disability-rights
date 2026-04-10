@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config({ path: '../../.env' }); // Load from root if possible
 
@@ -11,7 +10,7 @@ const port = process.env.PORT || 4000;
 const prisma = new PrismaClient();
 
 // Ensure Gemini API Key is available
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const geminiApiKey = process.env.GEMINI_API_KEY || '';
 const configuredGeminiModel = process.env.GEMINI_MODEL?.trim();
 
 const candidateGeminiModels = [
@@ -29,14 +28,85 @@ function isNotFoundModelError(error: unknown) {
   return message.includes('404') || message.toLowerCase().includes('not found');
 }
 
+type GeminiModelListResponse = {
+  models?: Array<{
+    name?: string;
+    supportedGenerationMethods?: string[];
+  }>;
+};
+
+type GeminiGenerateResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string;
+      }>;
+    };
+  }>;
+};
+
+async function fetchSupportedGeminiModels() {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    const bodyText = await response.text();
+    throw new Error(`ListModels failed (${response.status}): ${bodyText}`);
+  }
+
+  const data = (await response.json()) as GeminiModelListResponse;
+  return (data.models || [])
+    .filter((model) => model.supportedGenerationMethods?.includes('generateContent'))
+    .map((model) => (model.name || '').replace(/^models\//, ''))
+    .filter(Boolean);
+}
+
+async function generateWithModel(modelName: string, prompt: string) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [{ text: prompt }],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const bodyText = await response.text();
+    throw new Error(`GenerateContent failed for ${modelName} (${response.status}): ${bodyText}`);
+  }
+
+  const data = (await response.json()) as GeminiGenerateResponse;
+  const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('').trim();
+
+  if (!text) {
+    throw new Error(`Empty Gemini response for model ${modelName}`);
+  }
+
+  return text;
+}
+
 async function generateWithModelFallback(prompt: string) {
   let lastError: unknown = null;
+  let modelsToTry = [...candidateGeminiModels];
 
-  for (const modelName of candidateGeminiModels) {
+  try {
+    const discoveredModels = await fetchSupportedGeminiModels();
+    modelsToTry = [...new Set([...modelsToTry, ...discoveredModels])];
+  } catch (error) {
+    console.warn('Gemini ListModels request failed. Continuing with static fallbacks.', error);
+  }
+
+  for (const modelName of modelsToTry) {
     try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      return { modelName, responseText: result.response.text() };
+      const responseText = await generateWithModel(modelName, prompt);
+      return { modelName, responseText };
     } catch (error) {
       lastError = error;
       if (!isNotFoundModelError(error)) {

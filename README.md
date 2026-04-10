@@ -64,7 +64,7 @@ This application is designed for seamless deployment on Railway using a Monorepo
   - `DATABASE_URL`: Ensure this links to the provisioned PostgreSQL add-on.
   - `GEMINI_API_KEY`: Used by the AI orchestration service.
   - `GEMINI_MODEL` (optional): Preferred Gemini model ID for `generateContent`.
-    - The API now retries with fallback model IDs automatically when a model returns `404 Not Found`.
+    - The API first calls Gemini `ListModels` and then retries with fallback model IDs automatically when a model returns `404 Not Found`.
     - Example values: `gemini-2.0-flash`, `gemini-1.5-pro-latest`.
 
 #### Web Service Configuration

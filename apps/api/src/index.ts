@@ -166,7 +166,32 @@ app.post('/api/analyses', async (req, res) => {
             "mainProblem": "Description of the main legal/normative problem",
             "gapType": "Type of normative gap (e.g., Exclusion, Contradiction)",
             "likelyRemedialLevel": "Where it should be fixed (e.g., Federal Legislature)",
-            "methodologicalCaution": "Any cautions or limitations to this finding"
+            "methodologicalCaution": "Any cautions or limitations to this finding",
+            "actorRecords": [
+              {
+                "actorName": "Name of the actor",
+                "role": "Role of the actor",
+                "responsibilityFlow": "How responsibility flows",
+                "enforceability": "Level of enforceability"
+              }
+            ],
+            "gapRecords": [
+              {
+                "standardEngaged": "The legal standard engaged",
+                "severity": "Severity of the gap",
+                "interpretiveBasis": "Interpretive basis for the gap",
+                "caution": "Methodological caution specific to this gap"
+              }
+            ],
+            "argumentRecords": [
+              {
+                "legalProblem": "The specific legal problem",
+                "standardEngaged": "The relevant standard",
+                "deficiencyType": "Type of legal deficiency",
+                "doctrinalSupport": "Relevant doctrinal support",
+                "remedialPathway": "Possible remedial pathway"
+              }
+            ]
           }
 
           Text to analyze:
@@ -191,6 +216,33 @@ app.post('/api/analyses', async (req, res) => {
             methodologicalCaution: parsedFindings.methodologicalCaution,
           }
         });
+
+        if (parsedFindings.actorRecords && Array.isArray(parsedFindings.actorRecords)) {
+          await prisma.actorRecord.createMany({
+            data: parsedFindings.actorRecords.map((r: any) => ({
+              analysisRunId: analysisRun.id,
+              ...r
+            }))
+          });
+        }
+
+        if (parsedFindings.gapRecords && Array.isArray(parsedFindings.gapRecords)) {
+          await prisma.gapRecord.createMany({
+            data: parsedFindings.gapRecords.map((r: any) => ({
+              analysisRunId: analysisRun.id,
+              ...r
+            }))
+          });
+        }
+
+        if (parsedFindings.argumentRecords && Array.isArray(parsedFindings.argumentRecords)) {
+          await prisma.argumentRecord.createMany({
+            data: parsedFindings.argumentRecords.map((r: any) => ({
+              analysisRunId: analysisRun.id,
+              ...r
+            }))
+          });
+        }
 
         // Update status
         await prisma.analysisRun.update({

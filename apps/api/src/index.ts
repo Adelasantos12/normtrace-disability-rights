@@ -49,7 +49,7 @@ app.post('/api/analyses', async (req, res) => {
     // In production, this would be queued (e.g., BullMQ)
     if (process.env.GEMINI_API_KEY) {
       try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
         const prompt = `
           Perform a normative analysis on the following legal text for jurisdiction: ${jurisdiction}.

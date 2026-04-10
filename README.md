@@ -63,6 +63,8 @@ This application is designed for seamless deployment on Railway using a Monorepo
 - **Environment Variables**:
   - `DATABASE_URL`: Ensure this links to the provisioned PostgreSQL add-on.
   - `GEMINI_API_KEY`: Used by the AI orchestration service.
+  - `GEMINI_MODEL` (optional): Gemini model ID for `generateContent` (default: `gemini-1.5-flash`).
+    - Example valid values: `gemini-1.5-flash`, `gemini-1.5-pro`.
 
 #### Web Service Configuration
 - **Root Directory**: `/` (Leave empty to use monorepo context)

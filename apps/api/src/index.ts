@@ -12,6 +12,7 @@ const prisma = new PrismaClient();
 
 // Ensure Gemini API Key is available
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const geminiModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 app.use(cors());
 app.use(express.json({ limit: '100mb' })); // Allow large text submissions
@@ -49,7 +50,7 @@ app.post('/api/analyses', async (req, res) => {
     // In production, this would be queued (e.g., BullMQ)
     if (process.env.GEMINI_API_KEY) {
       try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+        const model = genAI.getGenerativeModel({ model: geminiModel });
 
         const prompt = `
           Perform a normative analysis on the following legal text for jurisdiction: ${jurisdiction}.
@@ -65,7 +66,7 @@ app.post('/api/analyses', async (req, res) => {
           }
 
           Text to analyze:
-          ${sourceText.substring(0, 30000)} // gemini-pro token limit is ~32k
+          ${sourceText.substring(0, 30000)}
         `;
 
         const result = await model.generateContent(prompt);
@@ -93,7 +94,7 @@ app.post('/api/analyses', async (req, res) => {
         });
 
       } catch (geminiError) {
-        console.error("Gemini Analysis Error:", geminiError);
+        console.error(`Gemini Analysis Error (model: ${geminiModel}):`, geminiError);
         await prisma.analysisRun.update({
           where: { id: analysisRun.id },
           data: { status: 'FAILED' }

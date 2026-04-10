@@ -12,7 +12,43 @@ const prisma = new PrismaClient();
 
 // Ensure Gemini API Key is available
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const geminiModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const configuredGeminiModel = process.env.GEMINI_MODEL?.trim();
+
+const extractModelId = (name: string) => name.replace(/^models\//, '');
+
+async function resolveGeminiModel() {
+  const priorityModels = [
+    configuredGeminiModel,
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash-latest',
+    'gemini-1.5-pro-latest',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+  ].filter((model): model is string => Boolean(model));
+
+  try {
+    const { models = [] } = await genAI.listModels();
+    const supportedModels = models
+      .filter((model) => model.supportedGenerationMethods?.includes('generateContent'))
+      .map((model) => extractModelId(model.name || ''))
+      .filter(Boolean);
+
+    for (const model of priorityModels) {
+      if (supportedModels.includes(model)) {
+        return model;
+      }
+    }
+
+    if (supportedModels.length > 0) {
+      return supportedModels[0];
+    }
+  } catch (error) {
+    console.warn('Gemini model discovery failed. Falling back to priority defaults.', error);
+  }
+
+  return priorityModels[0] || 'gemini-1.5-pro-latest';
+}
 
 app.use(cors());
 app.use(express.json({ limit: '100mb' })); // Allow large text submissions
@@ -49,7 +85,9 @@ app.post('/api/analyses', async (req, res) => {
     // 2. Perform Gemini Analysis (asynchronous, but we await for simplicity in pilot)
     // In production, this would be queued (e.g., BullMQ)
     if (process.env.GEMINI_API_KEY) {
+      let geminiModel = configuredGeminiModel || 'auto-discovery';
       try {
+        geminiModel = await resolveGeminiModel();
         const model = genAI.getGenerativeModel({ model: geminiModel });
 
         const prompt = `

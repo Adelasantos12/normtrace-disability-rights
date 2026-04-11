@@ -63,6 +63,15 @@ function resolveGeminiTimeoutMs() {
   return 90_000;
 }
 
+function isMissingTableError(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const maybePrismaError = error as { code?: string };
+  return maybePrismaError.code === 'P2021';
+}
+
 type GeminiModelListResponse = {
   models?: Array<{
     name?: string;
@@ -236,40 +245,61 @@ async function processAnalysisInBackground(analysisRun: { id: string }, payload:
 
     // Save findings
     if (parsedFindings.dashboardSummaries && Array.isArray(parsedFindings.dashboardSummaries)) {
-      await prisma.dashboardSummary.createMany({
-        data: parsedFindings.dashboardSummaries.map((r: any) => ({
-          analysisRunId: analysisRun.id,
-          dimension: r.dimension || 'Unknown',
-          value: r.value,
-          explanation: r.explanation
-        }))
-      });
+      try {
+        await prisma.dashboardSummary.createMany({
+          data: parsedFindings.dashboardSummaries.map((r: any) => ({
+            analysisRunId: analysisRun.id,
+            dimension: r.dimension || 'Unknown',
+            value: r.value,
+            explanation: r.explanation
+          }))
+        });
+      } catch (error) {
+        if (!isMissingTableError(error)) {
+          throw error;
+        }
+        console.warn('DashboardSummary table not found. Skipping dashboard summary persistence.', error);
+      }
     }
 
     if (parsedFindings.heatmapRecords && Array.isArray(parsedFindings.heatmapRecords)) {
-      await prisma.heatmapRecord.createMany({
-        data: parsedFindings.heatmapRecords.map((r: any) => ({
-          analysisRunId: analysisRun.id,
-          domesticProvision: r.domesticProvision,
-          crpdArticle: r.crpdArticle,
-          alignmentType: r.alignmentType,
-          evidenceExcerpt: r.evidenceExcerpt,
-          analyticalNote: r.analyticalNote
-        }))
-      });
+      try {
+        await prisma.heatmapRecord.createMany({
+          data: parsedFindings.heatmapRecords.map((r: any) => ({
+            analysisRunId: analysisRun.id,
+            domesticProvision: r.domesticProvision,
+            crpdArticle: r.crpdArticle,
+            alignmentType: r.alignmentType,
+            evidenceExcerpt: r.evidenceExcerpt,
+            analyticalNote: r.analyticalNote
+          }))
+        });
+      } catch (error) {
+        if (!isMissingTableError(error)) {
+          throw error;
+        }
+        console.warn('HeatmapRecord table not found. Skipping heatmap persistence.', error);
+      }
     }
 
     if (parsedFindings.findingCards && Array.isArray(parsedFindings.findingCards)) {
-      await prisma.structuredFindingCard.createMany({
-        data: parsedFindings.findingCards.map((r: any) => ({
-          analysisRunId: analysisRun.id,
-          title: r.title || 'Untitled Finding',
-          category: r.category,
-          significance: r.significance,
-          legalExcerpt: r.legalExcerpt,
-          standardEngaged: r.standardEngaged
-        }))
-      });
+      try {
+        await prisma.structuredFindingCard.createMany({
+          data: parsedFindings.findingCards.map((r: any) => ({
+            analysisRunId: analysisRun.id,
+            title: r.title || 'Untitled Finding',
+            category: r.category,
+            significance: r.significance,
+            legalExcerpt: r.legalExcerpt,
+            standardEngaged: r.standardEngaged
+          }))
+        });
+      } catch (error) {
+        if (!isMissingTableError(error)) {
+          throw error;
+        }
+        console.warn('StructuredFindingCard table not found. Skipping finding cards persistence.', error);
+      }
     }
 
     await prisma.analysisRun.update({
@@ -383,19 +413,48 @@ app.get('/api/analyses', async (req, res) => {
 
 app.get('/api/analyses/:id', async (req, res) => {
   try {
-    const analysis = await prisma.analysisRun.findUnique({
+    const analysisRun = await prisma.analysisRun.findUnique({
       where: { id: req.params.id },
-      include: {
-        sourceDocument: true,
-        dashboardSummaries: true,
-        heatmapRecords: true,
-        findingCards: true
-      }
     });
 
-    if (!analysis) {
+    if (!analysisRun) {
       return res.status(404).json({ error: 'Analysis not found' });
     }
+
+    const [sourceDocument, dashboardSummaries, heatmapRecords, findingCards] = await Promise.all([
+      prisma.sourceDocument.findUnique({ where: { analysisRunId: analysisRun.id } }).catch((error) => {
+        if (isMissingTableError(error)) {
+          return null;
+        }
+        throw error;
+      }),
+      prisma.dashboardSummary.findMany({ where: { analysisRunId: analysisRun.id } }).catch((error) => {
+        if (isMissingTableError(error)) {
+          return [];
+        }
+        throw error;
+      }),
+      prisma.heatmapRecord.findMany({ where: { analysisRunId: analysisRun.id } }).catch((error) => {
+        if (isMissingTableError(error)) {
+          return [];
+        }
+        throw error;
+      }),
+      prisma.structuredFindingCard.findMany({ where: { analysisRunId: analysisRun.id } }).catch((error) => {
+        if (isMissingTableError(error)) {
+          return [];
+        }
+        throw error;
+      })
+    ]);
+
+    const analysis = {
+      ...analysisRun,
+      sourceDocument,
+      dashboardSummaries,
+      heatmapRecords,
+      findingCards
+    };
 
     res.status(200).json({ analysis });
   } catch (error) {

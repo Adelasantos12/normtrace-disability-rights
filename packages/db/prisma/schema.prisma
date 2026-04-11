@@ -44,10 +44,9 @@ model AnalysisRun {
   updatedAt      DateTime       @updatedAt
 
   sourceDocument     SourceDocument?
-  structuredFindings StructuredFinding[]
-  gapRecords         GapRecord[]
-  actorRecords       ActorRecord[]
-  argumentRecords    ArgumentRecord[]
+  dashboardSummaries DashboardSummary[]
+  heatmapRecords     HeatmapRecord[]
+  findingCards       StructuredFindingCard[]
 }
 
 model SourceDocument {
@@ -61,43 +60,33 @@ model SourceDocument {
   completenessStatus String?
 }
 
-model StructuredFinding {
+model DashboardSummary {
   id                    String      @id @default(uuid())
   analysisRunId         String
   analysisRun           AnalysisRun @relation(fields: [analysisRunId], references: [id])
-  mainProblem           String?
-  gapType               String?
-  likelyRemedialLevel   String?
-  methodologicalCaution String?
+  dimension             String      // e.g., "Normative coverage", "Institutional anchoring"
+  value                 String?     // Score or descriptive value
+  explanation           String?
 }
 
-model GapRecord {
-  id                String      @id @default(uuid())
-  analysisRunId     String
-  analysisRun       AnalysisRun @relation(fields: [analysisRunId], references: [id])
-  standardEngaged   String?
-  severity          String?
-  interpretiveBasis String?
-  caution           String?
-}
-
-model ActorRecord {
+model HeatmapRecord {
   id                 String      @id @default(uuid())
   analysisRunId      String
   analysisRun        AnalysisRun @relation(fields: [analysisRunId], references: [id])
-  actorName          String?
-  role               String?
-  responsibilityFlow String?
-  enforceability     String?
+  domesticProvision  String?
+  crpdArticle        String?
+  alignmentType      String?     // e.g., "Strong anchoring", "Partial anchoring", "Normative silence"
+  evidenceExcerpt    String?
+  analyticalNote     String?
 }
 
-model ArgumentRecord {
+model StructuredFindingCard {
   id               String      @id @default(uuid())
   analysisRunId    String
   analysisRun      AnalysisRun @relation(fields: [analysisRunId], references: [id])
-  legalProblem     String?
-  standardEngaged  String?
-  deficiencyType   String?
-  doctrinalSupport String?
-  remedialPathway  String?
+  title            String
+  category         String?     // e.g., "omission", "ambiguity", "weak enforceability"
+  significance     String?     // why it matters for implementation
+  legalExcerpt     String?
+  standardEngaged  String?     // linked standard / CRPD reference
 }

@@ -23,6 +23,12 @@ const candidateGeminiModels = [
     'gemini-1.5-pro',
   ].filter((model): model is string => Boolean(model));
 
+const languageLabelMap: Record<string, string> = {
+  EN: 'English',
+  ES: 'Spanish',
+  FR: 'French',
+};
+
 function isNotFoundModelError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes('404') || message.toLowerCase().includes('not found');
@@ -75,6 +81,7 @@ async function generateWithModel(modelName: string, prompt: string) {
         },
       ],
     }),
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {
@@ -119,6 +126,139 @@ async function generateWithModelFallback(prompt: string) {
   throw lastError || new Error('No compatible Gemini model available.');
 }
 
+function buildAnalysisPrompt({
+  jurisdiction,
+  legalLevel,
+  language,
+  sourceText,
+}: {
+  jurisdiction: string;
+  legalLevel?: string;
+  language?: string;
+  sourceText: string;
+}) {
+  const outputLanguage = languageLabelMap[language || ''] || 'English';
+  return `
+    Perform a normative analysis on the following legal text for jurisdiction: ${jurisdiction}.
+    Legal Level: ${legalLevel || 'N/A'}.
+    Focus on Disability Rights (CRPD).
+    Output language for every value in the JSON: ${outputLanguage}.
+
+    Provide a JSON response with the following structure exactly (no markdown wrapping, just valid JSON):
+    {
+      "mainProblem": "Description of the main legal/normative problem",
+      "gapType": "Type of normative gap (e.g., Exclusion, Contradiction)",
+      "likelyRemedialLevel": "Where it should be fixed (e.g., Federal Legislature)",
+      "methodologicalCaution": "Any cautions or limitations to this finding",
+      "actorRecords": [
+        {
+          "actorName": "Name of the actor",
+          "role": "Role of the actor",
+          "responsibilityFlow": "How responsibility flows",
+          "enforceability": "Level of enforceability"
+        }
+      ],
+      "gapRecords": [
+        {
+          "standardEngaged": "The legal standard engaged",
+          "severity": "Severity of the gap",
+          "interpretiveBasis": "Interpretive basis for the gap",
+          "caution": "Methodological caution specific to this gap"
+        }
+      ],
+      "argumentRecords": [
+        {
+          "legalProblem": "The specific legal problem",
+          "standardEngaged": "The relevant standard",
+          "deficiencyType": "Type of legal deficiency",
+          "doctrinalSupport": "Relevant doctrinal support",
+          "remedialPathway": "Possible remedial pathway"
+        }
+      ]
+    }
+
+    Text to analyze:
+    ${sourceText.substring(0, 30000)}
+  `;
+}
+
+async function processAnalysisInBackground(analysisRun: { id: string }, payload: {
+  jurisdiction: string;
+  legalLevel?: string;
+  language?: string;
+  sourceText: string;
+}) {
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn("GEMINI_API_KEY not found. Skipping real analysis.");
+    await prisma.analysisRun.update({
+      where: { id: analysisRun.id },
+      data: { status: 'COMPLETED_MOCK' }
+    });
+    return;
+  }
+
+  let geminiModel = configuredGeminiModel || candidateGeminiModels[0] || 'unknown';
+  try {
+    const prompt = buildAnalysisPrompt(payload);
+    const generation = await generateWithModelFallback(prompt);
+    geminiModel = generation.modelName;
+    const responseText = generation.responseText;
+
+    // Clean up markdown code blocks if Gemini returns them
+    const jsonStr = responseText.replace(/```json\n?|\n?```/g, '').trim();
+    const parsedFindings = JSON.parse(jsonStr);
+
+    // Save findings
+    await prisma.structuredFinding.create({
+      data: {
+        analysisRunId: analysisRun.id,
+        mainProblem: parsedFindings.mainProblem,
+        gapType: parsedFindings.gapType,
+        likelyRemedialLevel: parsedFindings.likelyRemedialLevel,
+        methodologicalCaution: parsedFindings.methodologicalCaution,
+      }
+    });
+
+    if (parsedFindings.actorRecords && Array.isArray(parsedFindings.actorRecords)) {
+      await prisma.actorRecord.createMany({
+        data: parsedFindings.actorRecords.map((r: any) => ({
+          analysisRunId: analysisRun.id,
+          ...r
+        }))
+      });
+    }
+
+    if (parsedFindings.gapRecords && Array.isArray(parsedFindings.gapRecords)) {
+      await prisma.gapRecord.createMany({
+        data: parsedFindings.gapRecords.map((r: any) => ({
+          analysisRunId: analysisRun.id,
+          ...r
+        }))
+      });
+    }
+
+    if (parsedFindings.argumentRecords && Array.isArray(parsedFindings.argumentRecords)) {
+      await prisma.argumentRecord.createMany({
+        data: parsedFindings.argumentRecords.map((r: any) => ({
+          analysisRunId: analysisRun.id,
+          ...r
+        }))
+      });
+    }
+
+    await prisma.analysisRun.update({
+      where: { id: analysisRun.id },
+      data: { status: 'COMPLETED' }
+    });
+  } catch (geminiError) {
+    console.error(`Gemini Analysis Error (model: ${geminiModel}):`, geminiError);
+    await prisma.analysisRun.update({
+      where: { id: analysisRun.id },
+      data: { status: 'FAILED' }
+    });
+  }
+}
+
 app.use(cors());
 app.use(express.json({ limit: '100mb' })); // Allow large text submissions
 
@@ -151,119 +291,13 @@ app.post('/api/analyses', async (req, res) => {
       }
     });
 
-    // 2. Perform Gemini Analysis (asynchronous, but we await for simplicity in pilot)
-    // In production, this would be queued (e.g., BullMQ)
-    if (process.env.GEMINI_API_KEY) {
-      let geminiModel = configuredGeminiModel || candidateGeminiModels[0] || 'unknown';
-      try {
-        const prompt = `
-          Perform a normative analysis on the following legal text for jurisdiction: ${jurisdiction}.
-          Legal Level: ${legalLevel || 'N/A'}.
-          Focus on Disability Rights (CRPD).
-
-          Provide a JSON response with the following structure exactly (no markdown wrapping, just valid JSON):
-          {
-            "mainProblem": "Description of the main legal/normative problem",
-            "gapType": "Type of normative gap (e.g., Exclusion, Contradiction)",
-            "likelyRemedialLevel": "Where it should be fixed (e.g., Federal Legislature)",
-            "methodologicalCaution": "Any cautions or limitations to this finding",
-            "actorRecords": [
-              {
-                "actorName": "Name of the actor",
-                "role": "Role of the actor",
-                "responsibilityFlow": "How responsibility flows",
-                "enforceability": "Level of enforceability"
-              }
-            ],
-            "gapRecords": [
-              {
-                "standardEngaged": "The legal standard engaged",
-                "severity": "Severity of the gap",
-                "interpretiveBasis": "Interpretive basis for the gap",
-                "caution": "Methodological caution specific to this gap"
-              }
-            ],
-            "argumentRecords": [
-              {
-                "legalProblem": "The specific legal problem",
-                "standardEngaged": "The relevant standard",
-                "deficiencyType": "Type of legal deficiency",
-                "doctrinalSupport": "Relevant doctrinal support",
-                "remedialPathway": "Possible remedial pathway"
-              }
-            ]
-          }
-
-          Text to analyze:
-          ${sourceText.substring(0, 30000)}
-        `;
-
-        const generation = await generateWithModelFallback(prompt);
-        geminiModel = generation.modelName;
-        const responseText = generation.responseText;
-
-        // Clean up markdown code blocks if Gemini returns them
-        const jsonStr = responseText.replace(/```json\n?|\n?```/g, '').trim();
-        const parsedFindings = JSON.parse(jsonStr);
-
-        // 3. Save findings
-        await prisma.structuredFinding.create({
-          data: {
-            analysisRunId: analysisRun.id,
-            mainProblem: parsedFindings.mainProblem,
-            gapType: parsedFindings.gapType,
-            likelyRemedialLevel: parsedFindings.likelyRemedialLevel,
-            methodologicalCaution: parsedFindings.methodologicalCaution,
-          }
-        });
-
-        if (parsedFindings.actorRecords && Array.isArray(parsedFindings.actorRecords)) {
-          await prisma.actorRecord.createMany({
-            data: parsedFindings.actorRecords.map((r: any) => ({
-              analysisRunId: analysisRun.id,
-              ...r
-            }))
-          });
-        }
-
-        if (parsedFindings.gapRecords && Array.isArray(parsedFindings.gapRecords)) {
-          await prisma.gapRecord.createMany({
-            data: parsedFindings.gapRecords.map((r: any) => ({
-              analysisRunId: analysisRun.id,
-              ...r
-            }))
-          });
-        }
-
-        if (parsedFindings.argumentRecords && Array.isArray(parsedFindings.argumentRecords)) {
-          await prisma.argumentRecord.createMany({
-            data: parsedFindings.argumentRecords.map((r: any) => ({
-              analysisRunId: analysisRun.id,
-              ...r
-            }))
-          });
-        }
-
-        // Update status
-        await prisma.analysisRun.update({
-          where: { id: analysisRun.id },
-          data: { status: 'COMPLETED' }
-        });
-
-      } catch (geminiError) {
-        console.error(`Gemini Analysis Error (model: ${geminiModel}):`, geminiError);
-        await prisma.analysisRun.update({
-          where: { id: analysisRun.id },
-          data: { status: 'FAILED' }
-        });
-      }
-    } else {
-       console.warn("GEMINI_API_KEY not found. Skipping real analysis.");
-       await prisma.analysisRun.update({
-          where: { id: analysisRun.id },
-          data: { status: 'COMPLETED_MOCK' }
-       });
-    }
+    // 2. Trigger analysis asynchronously and respond immediately.
+    void processAnalysisInBackground(analysisRun, {
+      jurisdiction,
+      legalLevel,
+      language,
+      sourceText,
+    });
 
     res.status(201).json({
       message: 'Analysis initiated',

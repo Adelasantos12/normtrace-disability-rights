@@ -39,6 +39,30 @@ function isNotFoundModelError(error: unknown) {
   return message.includes('404') || message.toLowerCase().includes('not found');
 }
 
+function isRetryableModelError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const loweredMessage = message.toLowerCase();
+
+  return (
+    loweredMessage.includes('timeouterror') ||
+    loweredMessage.includes('timed out') ||
+    loweredMessage.includes('aborted due to timeout') ||
+    loweredMessage.includes('429') ||
+    loweredMessage.includes('500') ||
+    loweredMessage.includes('502') ||
+    loweredMessage.includes('503') ||
+    loweredMessage.includes('504')
+  );
+}
+
+function resolveGeminiTimeoutMs() {
+  const configured = Number(process.env.GEMINI_TIMEOUT_MS);
+  if (Number.isFinite(configured) && configured >= 10_000) {
+    return configured;
+  }
+  return 90_000;
+}
+
 type GeminiModelListResponse = {
   models?: Array<{
     name?: string;
@@ -86,7 +110,7 @@ async function generateWithModel(modelName: string, prompt: string) {
         },
       ],
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(resolveGeminiTimeoutMs()),
   });
 
   if (!response.ok) {
@@ -121,10 +145,10 @@ async function generateWithModelFallback(prompt: string) {
       return { modelName, responseText };
     } catch (error) {
       lastError = error;
-      if (!isNotFoundModelError(error)) {
+      if (!isNotFoundModelError(error) && !isRetryableModelError(error)) {
         throw error;
       }
-      console.warn(`Gemini model unavailable for generateContent: ${modelName}`);
+      console.warn(`Gemini model unavailable for generateContent: ${modelName}`, error);
     }
   }
 

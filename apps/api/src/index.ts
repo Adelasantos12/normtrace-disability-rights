@@ -11,6 +11,9 @@ const app = express();
 const port = process.env.PORT || 4000;
 const prisma = new PrismaClient();
 
+// Trust the proxy to ensure rate limiting works correctly behind Railway/Nginx
+app.set('trust proxy', 1);
+
 // Ensure Gemini API Key is available
 const geminiApiKey = process.env.GEMINI_API_KEY || '';
 const configuredGeminiModel = process.env.GEMINI_MODEL?.trim();
@@ -274,13 +277,21 @@ const allowedOrigins = process.env.FRONTEND_URL
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // Allow requests with no origin (like mobile apps, curl requests, or same-origin requests)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+
+    // Check exact match
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
     }
-    return callback(null, true);
+
+    // Check if it's a Railway app domain (fallback for production environments)
+    if (origin.endsWith('.railway.app') || origin.endsWith('.up.railway.app')) {
+      return callback(null, true);
+    }
+
+    const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+    return callback(new Error(msg), false);
   }
 }));
 

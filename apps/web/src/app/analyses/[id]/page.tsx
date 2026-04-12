@@ -45,7 +45,18 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
     const fetchAnalysis = async () => {
       try {
         const res = await fetch(`/api/analyses/${params.id}`);
-        if (!res.ok) throw new Error("Failed to load analysis");
+        if (!res.ok) {
+          let message = "Failed to load analysis";
+          try {
+            const errPayload = await res.json();
+            if (errPayload?.error) {
+              message = `${message}: ${errPayload.error}`;
+            }
+          } catch {
+            // no-op: keep the default message when body is not JSON
+          }
+          throw new Error(message);
+        }
         const data = await res.json();
         setAnalysis(data.analysis);
 

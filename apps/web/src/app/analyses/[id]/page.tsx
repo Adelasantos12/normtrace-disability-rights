@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Tabs, Card } from "@normtrace/ui";
 
@@ -38,6 +38,7 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<any>(null);
+  const evidenceDrawerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -79,6 +80,12 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
 
     return () => clearInterval(interval);
   }, [params.id]);
+
+  useEffect(() => {
+    if (selectedEvidence && evidenceDrawerRef.current) {
+      evidenceDrawerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [selectedEvidence]);
 
   if (loading) {
     return <div className="p-12 text-center text-neutral-500">Loading analysis data...</div>;
@@ -164,6 +171,7 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button
+                          type="button"
                           onClick={() => setSelectedEvidence(record)}
                           className="text-institutional-600 hover:text-institutional-900 font-medium text-xs underline"
                           aria-label={`View evidence for ${record.domesticProvision}`}
@@ -184,10 +192,12 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
           </Card>
 
           {selectedEvidence && (
+            <div ref={evidenceDrawerRef} id="evidence-drawer">
             <Card>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-medium text-institutional-900">Evidence Drawer</h3>
                 <button
+                  type="button"
                   onClick={() => setSelectedEvidence(null)}
                   className="text-neutral-400 hover:text-neutral-700"
                   aria-label="Close evidence drawer"
@@ -214,6 +224,7 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
                 </div>
               </div>
             </Card>
+            </div>
           )}
         </div>
       )

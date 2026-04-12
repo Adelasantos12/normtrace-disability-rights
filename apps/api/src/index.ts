@@ -72,6 +72,78 @@ function isMissingTableError(error: unknown) {
   return maybePrismaError.code === 'P2021';
 }
 
+type StructuredFindingsPayload = {
+  dashboardSummaries?: Array<{
+    dimension?: string;
+    value?: string;
+    explanation?: string;
+  }>;
+  heatmapRecords?: Array<{
+    domesticProvision?: string;
+    crpdArticle?: string;
+    alignmentType?: string;
+    evidenceExcerpt?: string;
+    analyticalNote?: string;
+  }>;
+  findingCards?: Array<{
+    title?: string;
+    category?: string;
+    significance?: string;
+    legalExcerpt?: string;
+    standardEngaged?: string;
+  }>;
+};
+
+function buildMockStructuredFindings(sourceText: string, outputLanguage: string): StructuredFindingsPayload {
+  const excerpt = sourceText.substring(0, 600).trim() || 'No source text available.';
+  const languageLabel = languageLabelMap[outputLanguage] || 'English';
+  return {
+    dashboardSummaries: [
+      {
+        dimension: 'Normative coverage',
+        value: 'Preliminary',
+        explanation: `Automated model generation is currently unavailable. This preliminary view suggests manual review is needed (${languageLabel}).`,
+      },
+      {
+        dimension: 'Normative silence / omissions',
+        value: 'Potential gaps',
+        explanation: 'The current run indicates potential gaps requiring verification against full legal text and primary sources.',
+      },
+    ],
+    heatmapRecords: [
+      {
+        domesticProvision: 'Initial extracted segment',
+        crpdArticle: 'CRPD thematic cluster (to validate)',
+        alignmentType: 'Ambiguous formulation',
+        evidenceExcerpt: excerpt,
+        analyticalNote: 'Preliminary fallback record generated because no compatible Gemini model was available.',
+      },
+    ],
+    findingCards: [
+      {
+        title: 'Model unavailability during structured extraction',
+        category: 'methodological limitation',
+        significance: 'The system indicates provisional findings only; legal experts should validate with primary sources.',
+        legalExcerpt: excerpt,
+        standardEngaged: 'CRPD (cross-cutting review suggested)',
+      },
+    ],
+  };
+}
+
+async function persistStructuredResultsInMetadata(analysisRunId: string, findings: StructuredFindingsPayload, modelName: string) {
+  await prisma.sourceDocument.updateMany({
+    where: { analysisRunId },
+    data: {
+      metadata: {
+        structuredResults: findings,
+        generationModel: modelName,
+        generatedAt: new Date().toISOString(),
+      }
+    }
+  });
+}
+
 type GeminiModelListResponse = {
   models?: Array<{
     name?: string;
@@ -241,7 +313,8 @@ async function processAnalysisInBackground(analysisRun: { id: string }, payload:
 
     // Clean up markdown code blocks if Gemini returns them
     const jsonStr = responseText.replace(/```json\n?|\n?```/g, '').trim();
-    const parsedFindings = JSON.parse(jsonStr);
+    const parsedFindings = JSON.parse(jsonStr) as StructuredFindingsPayload;
+    await persistStructuredResultsInMetadata(analysisRun.id, parsedFindings, geminiModel);
 
     // Save findings
     if (parsedFindings.dashboardSummaries && Array.isArray(parsedFindings.dashboardSummaries)) {
@@ -307,6 +380,16 @@ async function processAnalysisInBackground(analysisRun: { id: string }, payload:
       data: { status: 'COMPLETED' }
     });
   } catch (geminiError) {
+    if (isNotFoundModelError(geminiError)) {
+      const fallbackFindings = buildMockStructuredFindings(payload.sourceText, payload.language || 'EN');
+      await persistStructuredResultsInMetadata(analysisRun.id, fallbackFindings, geminiModel);
+      await prisma.analysisRun.update({
+        where: { id: analysisRun.id },
+        data: { status: 'COMPLETED_MOCK' }
+      });
+      return;
+    }
+
     console.error(`Gemini Analysis Error (model: ${geminiModel}):`, geminiError);
     await prisma.analysisRun.update({
       where: { id: analysisRun.id },
@@ -448,12 +531,25 @@ app.get('/api/analyses/:id', async (req, res) => {
       })
     ]);
 
+    const metadata = sourceDocument?.metadata as { structuredResults?: StructuredFindingsPayload } | null;
+    const structuredResults = metadata?.structuredResults;
+
+    const resolvedDashboardSummaries = (dashboardSummaries && dashboardSummaries.length > 0)
+      ? dashboardSummaries
+      : (structuredResults?.dashboardSummaries || []);
+    const resolvedHeatmapRecords = (heatmapRecords && heatmapRecords.length > 0)
+      ? heatmapRecords
+      : (structuredResults?.heatmapRecords || []);
+    const resolvedFindingCards = (findingCards && findingCards.length > 0)
+      ? findingCards
+      : (structuredResults?.findingCards || []);
+
     const analysis = {
       ...analysisRun,
       sourceDocument,
-      dashboardSummaries,
-      heatmapRecords,
-      findingCards
+      dashboardSummaries: resolvedDashboardSummaries,
+      heatmapRecords: resolvedHeatmapRecords,
+      findingCards: resolvedFindingCards
     };
 
     res.status(200).json({ analysis });

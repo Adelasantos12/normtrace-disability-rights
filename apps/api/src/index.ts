@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import crypto from 'node:crypto';
 
 dotenv.config({ path: '../../.env' }); // Load from root if possible
 
@@ -142,6 +143,10 @@ async function persistStructuredResultsInMetadata(analysisRunId: string, finding
       }
     }
   });
+}
+
+function computeSourceHash(text: string) {
+  return crypto.createHash('sha256').update(text.trim()).digest('hex');
 }
 
 type GeminiModelListResponse = {
@@ -446,6 +451,49 @@ app.post('/api/analyses', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    const normalizedVersionDate = versionDate || null;
+    const sourceHash = computeSourceHash(sourceText);
+
+    const existingAnalysis = await prisma.analysisRun.findFirst({
+      where: {
+        jurisdiction,
+        legalLevel: legalLevel || null,
+        outputLanguage: language || 'EN',
+        sourceDocument: {
+          is: {
+            content: sourceText,
+            versionDate: normalizedVersionDate,
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingAnalysis) {
+      return res.status(200).json({
+        message: 'Existing analysis found for same legal text and version date.',
+        analysisId: existingAnalysis.id,
+        reused: true,
+      });
+    }
+
+    const previousAnalysis = await prisma.analysisRun.findFirst({
+      where: {
+        jurisdiction,
+        legalLevel: legalLevel || null,
+        outputLanguage: language || 'EN',
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        sourceDocument: true,
+      }
+    });
+
+    const hasNewerVersion =
+      Boolean(normalizedVersionDate) &&
+      Boolean(previousAnalysis?.sourceDocument?.versionDate) &&
+      String(normalizedVersionDate) > String(previousAnalysis?.sourceDocument?.versionDate);
+
     // 1. Create initial DB record
     const analysisRun = await prisma.analysisRun.create({
       data: {
@@ -457,7 +505,12 @@ app.post('/api/analyses', async (req, res) => {
           create: {
             sourceType: 'TEXT',
             content: sourceText,
-            versionDate: versionDate,
+            versionDate: normalizedVersionDate,
+            metadata: {
+              sourceHash,
+              previousAnalysisId: hasNewerVersion ? previousAnalysis?.id : null,
+              detectedAsNewerReform: hasNewerVersion,
+            }
           }
         }
       }
@@ -473,7 +526,9 @@ app.post('/api/analyses', async (req, res) => {
 
     res.status(201).json({
       message: 'Analysis initiated',
-      analysisId: analysisRun.id
+      analysisId: analysisRun.id,
+      reused: false,
+      previousAnalysisId: hasNewerVersion ? previousAnalysis?.id : null,
     });
 
   } catch (error: any) {
@@ -486,6 +541,9 @@ app.post('/api/analyses', async (req, res) => {
 app.get('/api/analyses', async (req, res) => {
   try {
     const analyses = await prisma.analysisRun.findMany({
+      include: {
+        sourceDocument: true,
+      },
       orderBy: { createdAt: 'desc' }
     });
     res.status(200).json({ analyses });

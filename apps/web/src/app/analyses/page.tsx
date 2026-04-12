@@ -1,7 +1,42 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, Card } from "@normtrace/ui";
 
+type AnalysisListItem = {
+  id: string;
+  jurisdiction: string;
+  legalLevel?: string | null;
+  status: string;
+  createdAt: string;
+  sourceDocument?: {
+    versionDate?: string | null;
+  } | null;
+};
+
 export default function SavedAnalysesPage() {
+  const [analyses, setAnalyses] = useState<AnalysisListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadAnalyses = async () => {
+      try {
+        const res = await fetch("/api/analyses");
+        if (!res.ok) throw new Error("Failed to load saved analyses");
+        const data = await res.json();
+        setAnalyses(data.analyses || []);
+      } catch (err: any) {
+        setError(err.message || "Unknown error");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAnalyses();
+  }, []);
+
   return (
     <div className="max-w-4xl mx-auto px-6 py-12 text-neutral-900">
       <header className="mb-10 pb-6 border-b border-neutral-200">
@@ -17,42 +52,49 @@ export default function SavedAnalysesPage() {
       </header>
 
       <main>
-        <div className="space-y-4">
-          {/* In a real implementation, we would map over the Database records here */}
+        {loading && <p className="text-sm text-neutral-500">Loading analyses...</p>}
+        {error && <p className="text-sm text-red-600">Error: {error}</p>}
 
-          <Card className="hover:border-neutral-300 transition-colors">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="font-medium text-lg">Mexico - Federal (Pilot Sample)</h3>
-                <p className="text-sm text-neutral-500 mt-1">Ley General para la Inclusión de las Personas con Discapacidad</p>
-                <div className="flex gap-2 mt-3">
-                  <span className="px-2 py-1 bg-neutral-100 text-neutral-600 rounded text-xs">MX</span>
-                  <span className="px-2 py-1 bg-neutral-100 text-neutral-600 rounded text-xs">Federal</span>
+        {!loading && !error && (
+          <div className="space-y-4">
+            {analyses.map((analysis) => (
+              <Card key={analysis.id} className="hover:border-neutral-300 transition-colors">
+                <div className="flex justify-between items-start gap-4">
+                  <div>
+                    <h3 className="font-medium text-lg">
+                      {analysis.jurisdiction} {analysis.legalLevel ? `- ${analysis.legalLevel}` : ""}
+                    </h3>
+                    <p className="text-sm text-neutral-500 mt-1">
+                      Run ID: {analysis.id}
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <span className="px-2 py-1 bg-neutral-100 text-neutral-700 rounded text-xs">
+                        Status: {analysis.status}
+                      </span>
+                      <span className="px-2 py-1 bg-neutral-100 text-neutral-700 rounded text-xs">
+                        Version date: {analysis.sourceDocument?.versionDate || "N/A"}
+                      </span>
+                      <span className="px-2 py-1 bg-neutral-100 text-neutral-700 rounded text-xs">
+                        Created: {new Date(analysis.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  <Link href={`/analyses/${analysis.id}`}>
+                    <Button className="px-4 py-2 text-sm bg-white text-neutral-900 border border-neutral-300 hover:bg-neutral-50">
+                      View Results
+                    </Button>
+                  </Link>
                 </div>
-              </div>
-              <Link href="/analyses/sample-mx">
-                <Button className="px-4 py-2 text-sm bg-white text-neutral-900 border border-neutral-300 hover:bg-neutral-50">View Results</Button>
-              </Link>
-            </div>
-          </Card>
+              </Card>
+            ))}
 
-          <Card className="hover:border-neutral-300 transition-colors">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="font-medium text-lg">Switzerland - Federal (Pilot Sample)</h3>
-                <p className="text-sm text-neutral-500 mt-1">Behindertengleichstellungsgesetz (BehiG)</p>
-                <div className="flex gap-2 mt-3">
-                  <span className="px-2 py-1 bg-neutral-100 text-neutral-600 rounded text-xs">CH</span>
-                  <span className="px-2 py-1 bg-neutral-100 text-neutral-600 rounded text-xs">Federal</span>
-                </div>
-              </div>
-              <Link href="/analyses/sample-ch">
-                <Button className="px-4 py-2 text-sm bg-white text-neutral-900 border border-neutral-300 hover:bg-neutral-50">View Results</Button>
-              </Link>
-            </div>
-          </Card>
-
-        </div>
+            {analyses.length === 0 && (
+              <Card>
+                <p className="text-sm text-neutral-600">No analyses saved yet. Create one from “New Analysis”.</p>
+              </Card>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

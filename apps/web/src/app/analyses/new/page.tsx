@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import Link from "next/link";
 import { Button, Card } from "@normtrace/ui";
 import { useRouter } from "next/navigation";
+import { apiUrl } from "@/lib/api";
 declare global {
   interface Window {
     pdfjsLib: any;
@@ -78,7 +79,7 @@ export default function NewAnalysisPage() {
     try {
       setIsLoading(true);
       // Use the rewritten /api path which proxies to the backend
-      const response = await fetch(`/api/analyses`, {
+      const response = await fetch(apiUrl(`/api/analyses`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

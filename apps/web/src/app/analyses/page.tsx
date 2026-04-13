@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, Card } from "@normtrace/ui";
+import { apiUrl } from "@/lib/api";
 
 type AnalysisListItem = {
   id: string;
@@ -30,7 +31,7 @@ export default function SavedAnalysesPage() {
   useEffect(() => {
     const loadAnalyses = async () => {
       try {
-        const res = await fetch("/api/analyses");
+        const res = await fetch(apiUrl("/api/analyses"));
         if (!res.ok) throw new Error("Failed to load saved analyses");
         const data = await res.json();
         setDocuments(data.documents || []);

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Tabs, Card } from "@normtrace/ui";
+import { apiUrl } from "@/lib/api";
 
 interface AnalysisData {
   id: string;
@@ -45,7 +46,7 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
 
     const fetchAnalysis = async () => {
       try {
-        const res = await fetch(`/api/analyses/${params.id}`);
+        const res = await fetch(apiUrl(`/api/analyses/${params.id}`));
         if (!res.ok) {
           let message = "Failed to load analysis";
           try {

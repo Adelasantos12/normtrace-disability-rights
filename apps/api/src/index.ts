@@ -73,6 +73,12 @@ function isMissingTableError(error: unknown) {
   return maybePrismaError.code === 'P2021';
 }
 
+function isSchemaCompatibilityError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const maybePrismaError = error as { code?: string };
+  return maybePrismaError.code === 'P2021' || maybePrismaError.code === 'P2022';
+}
+
 type StructuredFindingsPayload = {
   dashboardSummaries?: Array<{
     dimension?: string;
@@ -394,35 +400,50 @@ async function processAnalysisInBackground(analysisRun: { id: string }, payload:
     const persistedRun = await prisma.analysisRun.findUnique({
       where: { id: analysisRun.id },
       select: { canonicalDocumentId: true },
+    }).catch((error) => {
+      if (isSchemaCompatibilityError(error)) {
+        return null;
+      }
+      throw error;
     });
 
     if (persistedRun?.canonicalDocumentId) {
-      await prisma.$transaction([
-        prisma.analysisRun.updateMany({
-          where: {
-            canonicalDocumentId: persistedRun.canonicalDocumentId,
-            isCurrent: true,
-            id: { not: analysisRun.id },
-          },
-          data: {
-            isCurrent: false,
-            isPubliclyVisible: false,
-            status: 'SUPERSEDED',
-          }
-        }),
-        prisma.analysisRun.update({
+      try {
+        await prisma.$transaction([
+          prisma.analysisRun.updateMany({
+            where: {
+              canonicalDocumentId: persistedRun.canonicalDocumentId,
+              isCurrent: true,
+              id: { not: analysisRun.id },
+            },
+            data: {
+              isCurrent: false,
+              isPubliclyVisible: false,
+              status: 'SUPERSEDED',
+            }
+          }),
+          prisma.analysisRun.update({
+            where: { id: analysisRun.id },
+            data: {
+              status: 'COMPLETED',
+              isCurrent: true,
+              isPubliclyVisible: true,
+            }
+          }),
+          prisma.canonicalDocument.update({
+            where: { id: persistedRun.canonicalDocumentId },
+            data: { currentAnalysisRunId: analysisRun.id }
+          })
+        ]);
+      } catch (error) {
+        if (!isSchemaCompatibilityError(error)) {
+          throw error;
+        }
+        await prisma.analysisRun.update({
           where: { id: analysisRun.id },
-          data: {
-            status: 'COMPLETED',
-            isCurrent: true,
-            isPubliclyVisible: true,
-          }
-        }),
-        prisma.canonicalDocument.update({
-          where: { id: persistedRun.canonicalDocumentId },
-          data: { currentAnalysisRunId: analysisRun.id }
-        })
-      ]);
+          data: { status: 'COMPLETED' }
+        });
+      }
     } else {
       await prisma.analysisRun.update({
         where: { id: analysisRun.id },
@@ -516,6 +537,40 @@ app.post('/api/analyses', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    const createLegacyRun = async () => {
+      const legacyRun = await prisma.analysisRun.create({
+        data: {
+          jurisdiction,
+          legalLevel: legalLevel || null,
+          outputLanguage: language || 'EN',
+          status: 'PROCESSING',
+          sourceDocument: {
+            create: {
+              sourceType: 'TEXT',
+              content: sourceText,
+              versionDate: versionDate || null,
+              metadata: {
+                legacyMode: true,
+              }
+            }
+          }
+        }
+      });
+
+      void processAnalysisInBackground(legacyRun, {
+        jurisdiction,
+        legalLevel,
+        language,
+        sourceText,
+      });
+
+      return res.status(201).json({
+        message: 'Analysis initiated (legacy schema mode).',
+        analysisId: legacyRun.id,
+        reused: false,
+      });
+    };
+
     const normalizedVersionDate = versionDate || null;
     const sourceHash = computeSourceHash(sourceText);
     const titleOriginal = title || `Document ${jurisdiction}`;
@@ -528,7 +583,22 @@ app.post('/api/analyses', async (req, res) => {
         titleNormalized,
         lawDate: lawDate || null,
       },
+    }).catch((error) => {
+      if (isSchemaCompatibilityError(error)) {
+        return null;
+      }
+      throw error;
     });
+
+    if (!existingCanonical) {
+      const canonicalModelAvailable = await prisma.canonicalDocument.findFirst({
+        where: { id: '__schema_check__' }
+      }).then(() => true).catch((error) => !isSchemaCompatibilityError(error));
+
+      if (!canonicalModelAvailable) {
+        return createLegacyRun();
+      }
+    }
 
     const canonicalDocument = existingCanonical
       ? existingCanonical
@@ -548,7 +618,16 @@ app.post('/api/analyses', async (req, res) => {
             language: language || 'EN',
             isPublic: true,
           }
+        }).catch((error) => {
+          if (isSchemaCompatibilityError(error)) {
+            return null;
+          }
+          throw error;
         });
+
+    if (!canonicalDocument) {
+      return createLegacyRun();
+    }
 
     const existingEquivalentRun = await prisma.analysisRun.findFirst({
       where: {
@@ -620,7 +699,16 @@ app.post('/api/analyses', async (req, res) => {
           }
         }
       }
+    }).catch(async (error) => {
+      if (isSchemaCompatibilityError(error)) {
+        return null;
+      }
+      throw error;
     });
+
+    if (!analysisRun) {
+      return createLegacyRun();
+    }
 
     await prisma.usageEvent.create({
       data: {
@@ -668,6 +756,31 @@ app.get('/api/analyses', async (req, res) => {
         },
       },
       orderBy: { updatedAt: 'desc' }
+    }).catch(async (error) => {
+      if (!isSchemaCompatibilityError(error)) {
+        throw error;
+      }
+
+      const analyses = await prisma.analysisRun.findMany({
+        include: { sourceDocument: true },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      return analyses.map((run) => ({
+        id: run.id,
+        jurisdiction: run.jurisdiction,
+        legalLevel: run.legalLevel,
+        titleOriginal: `Document ${run.jurisdiction}`,
+        lawDate: run.sourceDocument?.versionDate || null,
+        documentType: 'LAW',
+        updatedAt: run.updatedAt,
+        currentAnalysisRun: {
+          id: run.id,
+          status: run.status,
+          createdAt: run.createdAt,
+          sourceDocument: run.sourceDocument,
+        }
+      }));
     });
     res.status(200).json({ documents });
   } catch (error) {
@@ -680,6 +793,11 @@ app.get('/api/analyses/:id', async (req, res) => {
     const canonicalDocument = await prisma.canonicalDocument.findUnique({
       where: { id: req.params.id },
       include: { currentAnalysisRun: true },
+    }).catch((error) => {
+      if (isSchemaCompatibilityError(error)) {
+        return null;
+      }
+      throw error;
     });
     const runId = canonicalDocument?.currentAnalysisRun?.id || req.params.id;
 

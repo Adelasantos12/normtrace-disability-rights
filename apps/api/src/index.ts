@@ -166,6 +166,29 @@ function normalizeTitle(title: string) {
     .trim();
 }
 
+async function createLegacyRunRaw(input: {
+  jurisdiction: string;
+  legalLevel?: string;
+  language?: string;
+  sourceText: string;
+  versionDate?: string;
+}) {
+  const analysisRunId = crypto.randomUUID();
+  const sourceDocumentId = crypto.randomUUID();
+
+  await prisma.$executeRaw`
+    INSERT INTO "AnalysisRun" ("id","jurisdiction","legalLevel","outputLanguage","status","createdAt","updatedAt")
+    VALUES (${analysisRunId}, ${input.jurisdiction}, ${input.legalLevel || null}, ${input.language || 'EN'}, ${'PROCESSING'}, NOW(), NOW())
+  `;
+
+  await prisma.$executeRaw`
+    INSERT INTO "SourceDocument" ("id","analysisRunId","sourceType","content","versionDate")
+    VALUES (${sourceDocumentId}, ${analysisRunId}, ${'TEXT'}, ${input.sourceText}, ${input.versionDate || null})
+  `;
+
+  return { id: analysisRunId };
+}
+
 type GeminiModelListResponse = {
   models?: Array<{
     name?: string;
@@ -538,23 +561,12 @@ app.post('/api/analyses', async (req, res) => {
     }
 
     const createLegacyRun = async () => {
-      const legacyRun = await prisma.analysisRun.create({
-        data: {
-          jurisdiction,
-          legalLevel: legalLevel || null,
-          outputLanguage: language || 'EN',
-          status: 'PROCESSING',
-          sourceDocument: {
-            create: {
-              sourceType: 'TEXT',
-              content: sourceText,
-              versionDate: versionDate || null,
-              metadata: {
-                legacyMode: true,
-              }
-            }
-          }
-        }
+      const legacyRun = await createLegacyRunRaw({
+        jurisdiction,
+        legalLevel,
+        language,
+        sourceText,
+        versionDate,
       });
 
       void processAnalysisInBackground(legacyRun, {
@@ -761,24 +773,36 @@ app.get('/api/analyses', async (req, res) => {
         throw error;
       }
 
-      const analyses = await prisma.analysisRun.findMany({
-        include: { sourceDocument: true },
-        orderBy: { createdAt: 'desc' }
-      });
+      const analyses = await prisma.$queryRaw<Array<{
+        id: string;
+        jurisdiction: string;
+        legalLevel: string | null;
+        status: string;
+        createdAt: Date;
+        updatedAt: Date;
+        versionDate: string | null;
+      }>>`
+        SELECT ar."id", ar."jurisdiction", ar."legalLevel", ar."status", ar."createdAt", ar."updatedAt", sd."versionDate"
+        FROM "AnalysisRun" ar
+        LEFT JOIN "SourceDocument" sd ON sd."analysisRunId" = ar."id"
+        ORDER BY ar."createdAt" DESC
+      `;
 
       return analyses.map((run) => ({
         id: run.id,
         jurisdiction: run.jurisdiction,
         legalLevel: run.legalLevel,
         titleOriginal: `Document ${run.jurisdiction}`,
-        lawDate: run.sourceDocument?.versionDate || null,
+        lawDate: run.versionDate || null,
         documentType: 'LAW',
         updatedAt: run.updatedAt,
         currentAnalysisRun: {
           id: run.id,
           status: run.status,
           createdAt: run.createdAt,
-          sourceDocument: run.sourceDocument,
+          sourceDocument: {
+            versionDate: run.versionDate,
+          },
         }
       }));
     });
@@ -801,16 +825,50 @@ app.get('/api/analyses/:id', async (req, res) => {
     });
     const runId = canonicalDocument?.currentAnalysisRun?.id || req.params.id;
 
-    const analysisRun = await prisma.analysisRun.findUnique({ where: { id: runId } });
+    const analysisRun = await prisma.analysisRun.findUnique({ where: { id: runId } }).catch(async (error) => {
+      if (!isSchemaCompatibilityError(error)) {
+        throw error;
+      }
+      const rows = await prisma.$queryRaw<Array<{
+        id: string;
+        jurisdiction: string;
+        legalLevel: string | null;
+        outputLanguage: string;
+        status: string;
+        createdAt: Date;
+        updatedAt: Date;
+      }>>`
+        SELECT "id","jurisdiction","legalLevel","outputLanguage","status","createdAt","updatedAt"
+        FROM "AnalysisRun"
+        WHERE "id" = ${runId}
+        LIMIT 1
+      `;
+      return rows[0] || null;
+    });
 
     if (!analysisRun) {
       return res.status(404).json({ error: 'Analysis not found' });
     }
 
     const [sourceDocument, dashboardSummaries, heatmapRecords, findingCards] = await Promise.all([
-      prisma.sourceDocument.findUnique({ where: { analysisRunId: analysisRun.id } }).catch((error) => {
+      prisma.sourceDocument.findUnique({ where: { analysisRunId: analysisRun.id } }).catch(async (error) => {
         if (isMissingTableError(error)) {
           return null;
+        }
+        if (isSchemaCompatibilityError(error)) {
+          const rows = await prisma.$queryRaw<Array<{
+            analysisRunId: string;
+            sourceType: string;
+            content: string | null;
+            versionDate: string | null;
+            metadata: unknown;
+          }>>`
+            SELECT "analysisRunId","sourceType","content","versionDate","metadata"
+            FROM "SourceDocument"
+            WHERE "analysisRunId" = ${analysisRun.id}
+            LIMIT 1
+          `;
+          return rows[0] || null;
         }
         throw error;
       }),

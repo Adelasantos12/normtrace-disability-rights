@@ -913,14 +913,10 @@ app.get('/api/analyses/:id', async (req, res) => {
       heatmapRecords: resolvedHeatmapRecords,
       findingCards: resolvedFindingCards
     };
-    const runCanonicalDocumentId =
-      typeof analysisRun === 'object' && analysisRun !== null && 'canonicalDocumentId' in analysisRun
-        ? (analysisRun as { canonicalDocumentId?: string | null }).canonicalDocumentId || null
-        : null;
 
     await prisma.usageEvent.create({
       data: {
-        canonicalDocumentId: canonicalDocument?.id || runCanonicalDocumentId,
+        canonicalDocumentId: canonicalDocument?.id || null,
         analysisRunId: analysisRun.id,
         eventType: 'view_analysis',
         userAgent: req.header('user-agent') || null,

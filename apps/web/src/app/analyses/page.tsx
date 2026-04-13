@@ -6,17 +6,24 @@ import { Button, Card } from "@normtrace/ui";
 
 type AnalysisListItem = {
   id: string;
-  jurisdiction: string;
+  jurisdiction?: string | null;
   legalLevel?: string | null;
-  status: string;
-  createdAt: string;
-  sourceDocument?: {
-    versionDate?: string | null;
+  titleOriginal?: string | null;
+  lawDate?: string | null;
+  documentType?: string | null;
+  updatedAt: string;
+  currentAnalysisRun?: {
+    id: string;
+    status: string;
+    createdAt: string;
+    sourceDocument?: {
+      versionDate?: string | null;
+    } | null;
   } | null;
 };
 
 export default function SavedAnalysesPage() {
-  const [analyses, setAnalyses] = useState<AnalysisListItem[]>([]);
+  const [documents, setDocuments] = useState<AnalysisListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +33,7 @@ export default function SavedAnalysesPage() {
         const res = await fetch("/api/analyses");
         if (!res.ok) throw new Error("Failed to load saved analyses");
         const data = await res.json();
-        setAnalyses(data.analyses || []);
+        setDocuments(data.documents || []);
       } catch (err: any) {
         setError(err.message || "Unknown error");
       } finally {
@@ -57,29 +64,32 @@ export default function SavedAnalysesPage() {
 
         {!loading && !error && (
           <div className="space-y-4">
-            {analyses.map((analysis) => (
-              <Card key={analysis.id} className="hover:border-neutral-300 transition-colors">
+            {documents.map((document) => (
+              <Card key={document.id} className="hover:border-neutral-300 transition-colors">
                 <div className="flex justify-between items-start gap-4">
                   <div>
                     <h3 className="font-medium text-lg">
-                      {analysis.jurisdiction} {analysis.legalLevel ? `- ${analysis.legalLevel}` : ""}
+                      {document.titleOriginal || 'Untitled legal document'}
                     </h3>
                     <p className="text-sm text-neutral-500 mt-1">
-                      Run ID: {analysis.id}
+                      Jurisdiction: {document.jurisdiction || 'N/A'} {document.legalLevel ? `- ${document.legalLevel}` : ""}
                     </p>
                     <div className="flex flex-wrap gap-2 mt-3">
                       <span className="px-2 py-1 bg-neutral-100 text-neutral-700 rounded text-xs">
-                        Status: {analysis.status}
+                        Current status: {document.currentAnalysisRun?.status || 'N/A'}
                       </span>
                       <span className="px-2 py-1 bg-neutral-100 text-neutral-700 rounded text-xs">
-                        Version date: {analysis.sourceDocument?.versionDate || "N/A"}
+                        Law date: {document.lawDate || "N/A"}
                       </span>
                       <span className="px-2 py-1 bg-neutral-100 text-neutral-700 rounded text-xs">
-                        Created: {new Date(analysis.createdAt).toLocaleString()}
+                        Last update: {new Date(document.updatedAt).toLocaleString()}
+                      </span>
+                      <span className="px-2 py-1 bg-neutral-100 text-neutral-700 rounded text-xs">
+                        Type: {document.documentType || "N/A"}
                       </span>
                     </div>
                   </div>
-                  <Link href={`/analyses/${analysis.id}`}>
+                  <Link href={`/analyses/${document.id}`}>
                     <Button className="px-4 py-2 text-sm bg-white text-neutral-900 border border-neutral-300 hover:bg-neutral-50">
                       View Results
                     </Button>
@@ -88,7 +98,7 @@ export default function SavedAnalysesPage() {
               </Card>
             ))}
 
-            {analyses.length === 0 && (
+            {documents.length === 0 && (
               <Card>
                 <p className="text-sm text-neutral-600">No analyses saved yet. Create one from “New Analysis”.</p>
               </Card>

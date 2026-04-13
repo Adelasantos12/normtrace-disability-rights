@@ -18,6 +18,9 @@ export default function NewAnalysisPage() {
   const [sourceText, setSourceText] = useState("");
   const [pdfFileName, setPdfFileName] = useState("");
   const [versionDate, setVersionDate] = useState("");
+  const [title, setTitle] = useState("");
+  const [documentType, setDocumentType] = useState("LAW");
+  const [lawDate, setLawDate] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,7 +86,10 @@ export default function NewAnalysisPage() {
           legalLevel: jurisdiction === "SWITZERLAND" ? legalLevel : undefined,
           language,
           sourceText,
-          versionDate
+          versionDate,
+          title,
+          documentType,
+          lawDate,
         })
       });
 
@@ -99,7 +105,7 @@ export default function NewAnalysisPage() {
       }
 
       const data = await response.json();
-      router.push(`/analyses/${data.analysisId}`);
+      router.push(`/analyses/${data.canonicalDocumentId || data.analysisId}`);
     } catch (error: any) {
       console.error("Submission error:", error);
       alert(`Error starting analysis: ${error.message || "Please check your network and database connection."}`);
@@ -164,6 +170,42 @@ export default function NewAnalysisPage() {
                 <option value="ES">Spanish</option>
                 <option value="FR">French</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Document Title (Optional)</label>
+              <input
+                type="text"
+                className="w-full border border-neutral-300 rounded p-2 text-sm bg-white"
+                placeholder="e.g. Ley General para la Inclusión de las Personas con Discapacidad"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Document Type</label>
+              <select
+                className="w-full border border-neutral-300 rounded p-2 text-sm bg-white"
+                value={documentType}
+                onChange={(e) => setDocumentType(e.target.value)}
+              >
+                <option value="LAW">Law</option>
+                <option value="DECREE">Decree</option>
+                <option value="REGULATION">Regulation</option>
+                <option value="CODE">Code</option>
+                <option value="POLICY">Policy</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Law Date (Optional)</label>
+              <input
+                type="date"
+                className="w-full border border-neutral-300 rounded p-2 text-sm bg-white"
+                value={lawDate}
+                onChange={(e) => setLawDate(e.target.value)}
+              />
             </div>
 
             <div className="border-t border-neutral-200 pt-6">

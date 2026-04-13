@@ -149,6 +149,17 @@ function computeSourceHash(text: string) {
   return crypto.createHash('sha256').update(text.trim()).digest('hex');
 }
 
+function normalizeTitle(title: string) {
+  return title
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\b(ley|law|act|codigo|code|decreto|reglamento)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 type GeminiModelListResponse = {
   models?: Array<{
     name?: string;
@@ -380,10 +391,44 @@ async function processAnalysisInBackground(analysisRun: { id: string }, payload:
       }
     }
 
-    await prisma.analysisRun.update({
+    const persistedRun = await prisma.analysisRun.findUnique({
       where: { id: analysisRun.id },
-      data: { status: 'COMPLETED' }
+      select: { canonicalDocumentId: true },
     });
+
+    if (persistedRun?.canonicalDocumentId) {
+      await prisma.$transaction([
+        prisma.analysisRun.updateMany({
+          where: {
+            canonicalDocumentId: persistedRun.canonicalDocumentId,
+            isCurrent: true,
+            id: { not: analysisRun.id },
+          },
+          data: {
+            isCurrent: false,
+            isPubliclyVisible: false,
+            status: 'SUPERSEDED',
+          }
+        }),
+        prisma.analysisRun.update({
+          where: { id: analysisRun.id },
+          data: {
+            status: 'COMPLETED',
+            isCurrent: true,
+            isPubliclyVisible: true,
+          }
+        }),
+        prisma.canonicalDocument.update({
+          where: { id: persistedRun.canonicalDocumentId },
+          data: { currentAnalysisRunId: analysisRun.id }
+        })
+      ]);
+    } else {
+      await prisma.analysisRun.update({
+        where: { id: analysisRun.id },
+        data: { status: 'COMPLETED' }
+      });
+    }
   } catch (geminiError) {
     if (isNotFoundModelError(geminiError)) {
       const fallbackFindings = buildMockStructuredFindings(payload.sourceText, payload.language || 'EN');
@@ -443,9 +488,29 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+function isAdminRequest(req: express.Request) {
+  const token = req.header('x-admin-token');
+  return Boolean(process.env.ADMIN_TOKEN) && token === process.env.ADMIN_TOKEN;
+}
+
 app.post('/api/analyses', async (req, res) => {
   try {
-    const { jurisdiction, legalLevel, language, sourceText, versionDate } = req.body;
+    const {
+      jurisdiction,
+      legalLevel,
+      language,
+      sourceText,
+      versionDate,
+      title,
+      documentType,
+      country,
+      subnationalUnit,
+      lawDate,
+      publicationDate,
+      sourceUrl,
+      sessionId,
+      userId,
+    } = req.body;
 
     if (!jurisdiction || !sourceText) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -453,54 +518,96 @@ app.post('/api/analyses', async (req, res) => {
 
     const normalizedVersionDate = versionDate || null;
     const sourceHash = computeSourceHash(sourceText);
+    const titleOriginal = title || `Document ${jurisdiction}`;
+    const titleNormalized = normalizeTitle(titleOriginal);
 
-    const existingAnalysis = await prisma.analysisRun.findFirst({
+    const existingCanonical = await prisma.canonicalDocument.findFirst({
       where: {
         jurisdiction,
         legalLevel: legalLevel || null,
-        outputLanguage: language || 'EN',
+        titleNormalized,
+        lawDate: lawDate || null,
+      },
+    });
+
+    const canonicalDocument = existingCanonical
+      ? existingCanonical
+      : await prisma.canonicalDocument.create({
+          data: {
+            country: country || null,
+            subnationalUnit: subnationalUnit || null,
+            jurisdiction,
+            legalLevel: legalLevel || null,
+            documentType: documentType || 'LAW',
+            titleOriginal,
+            titleNormalized,
+            lawDate: lawDate || normalizedVersionDate,
+            publicationDate: publicationDate || null,
+            sourceUrl: sourceUrl || null,
+            documentHash: sourceHash,
+            language: language || 'EN',
+            isPublic: true,
+          }
+        });
+
+    const existingEquivalentRun = await prisma.analysisRun.findFirst({
+      where: {
+        canonicalDocumentId: canonicalDocument.id,
         sourceDocument: {
           is: {
-            content: sourceText,
             versionDate: normalizedVersionDate,
+            content: sourceText,
           }
-        }
+        },
+        status: { in: ['COMPLETED', 'COMPLETED_MOCK', 'PROCESSING'] }
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    if (existingAnalysis) {
+    if (existingEquivalentRun) {
+      await prisma.usageEvent.create({
+        data: {
+          userId: userId || null,
+          sessionId: sessionId || null,
+          canonicalDocumentId: canonicalDocument.id,
+          analysisRunId: existingEquivalentRun.id,
+          eventType: 'duplicate_detected',
+          countryHint: country || jurisdiction,
+          userAgent: req.header('user-agent') || null,
+        }
+      }).catch(() => null);
+
       return res.status(200).json({
-        message: 'Existing analysis found for same legal text and version date.',
-        analysisId: existingAnalysis.id,
+        message: 'Ya existe un análisis vigente de este documento. Puedes consultar el resultado actual.',
+        analysisId: existingEquivalentRun.id,
+        canonicalDocumentId: canonicalDocument.id,
         reused: true,
       });
     }
 
-    const previousAnalysis = await prisma.analysisRun.findFirst({
-      where: {
-        jurisdiction,
-        legalLevel: legalLevel || null,
-        outputLanguage: language || 'EN',
-      },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        sourceDocument: true,
-      }
-    });
-
-    const hasNewerVersion =
-      Boolean(normalizedVersionDate) &&
-      Boolean(previousAnalysis?.sourceDocument?.versionDate) &&
-      String(normalizedVersionDate) > String(previousAnalysis?.sourceDocument?.versionDate);
-
     // 1. Create initial DB record
     const analysisRun = await prisma.analysisRun.create({
       data: {
+        canonicalDocumentId: canonicalDocument.id,
         jurisdiction,
-        legalLevel,
+        legalLevel: legalLevel || null,
         outputLanguage: language || 'EN',
         status: 'PROCESSING',
+        isCurrent: false,
+        isPubliclyVisible: false,
+        triggerType: existingCanonical ? 're-run' : 'new',
+        createdByUserId: userId || null,
+        createdBySessionId: sessionId || null,
+        inputMetadata: {
+          titleOriginal,
+          titleNormalized,
+          documentType: documentType || null,
+          country: country || null,
+          subnationalUnit: subnationalUnit || null,
+          lawDate: lawDate || null,
+          publicationDate: publicationDate || null,
+          sourceUrl: sourceUrl || null,
+        },
         sourceDocument: {
           create: {
             sourceType: 'TEXT',
@@ -508,13 +615,24 @@ app.post('/api/analyses', async (req, res) => {
             versionDate: normalizedVersionDate,
             metadata: {
               sourceHash,
-              previousAnalysisId: hasNewerVersion ? previousAnalysis?.id : null,
-              detectedAsNewerReform: hasNewerVersion,
+              canonicalDocumentId: canonicalDocument.id,
             }
           }
         }
       }
     });
+
+    await prisma.usageEvent.create({
+      data: {
+        userId: userId || null,
+        sessionId: sessionId || null,
+        canonicalDocumentId: canonicalDocument.id,
+        analysisRunId: analysisRun.id,
+        eventType: existingCanonical ? 'rerun_analysis' : 'create_analysis',
+        countryHint: country || jurisdiction,
+        userAgent: req.header('user-agent') || null,
+      }
+    }).catch(() => null);
 
     // 2. Trigger analysis asynchronously and respond immediately.
     void processAnalysisInBackground(analysisRun, {
@@ -527,8 +645,8 @@ app.post('/api/analyses', async (req, res) => {
     res.status(201).json({
       message: 'Analysis initiated',
       analysisId: analysisRun.id,
+      canonicalDocumentId: canonicalDocument.id,
       reused: false,
-      previousAnalysisId: hasNewerVersion ? previousAnalysis?.id : null,
     });
 
   } catch (error: any) {
@@ -540,13 +658,18 @@ app.post('/api/analyses', async (req, res) => {
 
 app.get('/api/analyses', async (req, res) => {
   try {
-    const analyses = await prisma.analysisRun.findMany({
+    const documents = await prisma.canonicalDocument.findMany({
+      where: { isPublic: true },
       include: {
-        sourceDocument: true,
+        currentAnalysisRun: {
+          include: {
+            sourceDocument: true,
+          }
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { updatedAt: 'desc' }
     });
-    res.status(200).json({ analyses });
+    res.status(200).json({ documents });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -554,9 +677,13 @@ app.get('/api/analyses', async (req, res) => {
 
 app.get('/api/analyses/:id', async (req, res) => {
   try {
-    const analysisRun = await prisma.analysisRun.findUnique({
+    const canonicalDocument = await prisma.canonicalDocument.findUnique({
       where: { id: req.params.id },
+      include: { currentAnalysisRun: true },
     });
+    const runId = canonicalDocument?.currentAnalysisRun?.id || req.params.id;
+
+    const analysisRun = await prisma.analysisRun.findUnique({ where: { id: runId } });
 
     if (!analysisRun) {
       return res.status(404).json({ error: 'Analysis not found' });
@@ -604,16 +731,86 @@ app.get('/api/analyses/:id', async (req, res) => {
 
     const analysis = {
       ...analysisRun,
+      canonicalDocument,
       sourceDocument,
       dashboardSummaries: resolvedDashboardSummaries,
       heatmapRecords: resolvedHeatmapRecords,
       findingCards: resolvedFindingCards
     };
 
+    await prisma.usageEvent.create({
+      data: {
+        canonicalDocumentId: canonicalDocument?.id || analysisRun.canonicalDocumentId || null,
+        analysisRunId: analysisRun.id,
+        eventType: 'view_analysis',
+        userAgent: req.header('user-agent') || null,
+      }
+    }).catch(() => null);
+
     res.status(200).json({ analysis });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+app.get('/api/admin/analyses/runs', async (req, res) => {
+  if (!isAdminRequest(req)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const statusFilter = typeof req.query.status === 'string' ? req.query.status : null;
+  const runs = await prisma.analysisRun.findMany({
+    where: statusFilter ? { status: statusFilter } : {},
+    include: {
+      canonicalDocument: true,
+      sourceDocument: true,
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+  res.status(200).json({ runs });
+});
+
+app.patch('/api/admin/runs/:id/set-current', async (req, res) => {
+  if (!isAdminRequest(req)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const run = await prisma.analysisRun.findUnique({ where: { id: req.params.id } });
+  if (!run?.canonicalDocumentId) {
+    return res.status(404).json({ error: 'Run not found or has no canonical document' });
+  }
+  await prisma.$transaction([
+    prisma.analysisRun.updateMany({
+      where: { canonicalDocumentId: run.canonicalDocumentId },
+      data: { isCurrent: false, isPubliclyVisible: false, status: 'SUPERSEDED' },
+    }),
+    prisma.analysisRun.update({
+      where: { id: run.id },
+      data: { isCurrent: true, isPubliclyVisible: true, status: 'COMPLETED' },
+    }),
+    prisma.canonicalDocument.update({
+      where: { id: run.canonicalDocumentId },
+      data: { currentAnalysisRunId: run.id },
+    })
+  ]);
+  res.status(200).json({ ok: true });
+});
+
+app.patch('/api/admin/runs/:id/archive', async (req, res) => {
+  if (!isAdminRequest(req)) return res.status(403).json({ error: 'Forbidden' });
+  await prisma.analysisRun.update({
+    where: { id: req.params.id },
+    data: { status: 'ARCHIVED', isPubliclyVisible: false, adminNotes: 'Archived by admin' }
+  });
+  res.status(200).json({ ok: true });
+});
+
+app.delete('/api/admin/runs/:id', async (req, res) => {
+  if (!isAdminRequest(req)) return res.status(403).json({ error: 'Forbidden' });
+  await prisma.analysisRun.update({
+    where: { id: req.params.id },
+    data: { status: 'DELETED_BY_ADMIN', isPubliclyVisible: false, deletedAt: new Date() }
+  });
+  res.status(200).json({ ok: true, softDeleted: true });
 });
 
 app.listen(port, () => {

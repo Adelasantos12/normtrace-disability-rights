@@ -31,7 +31,7 @@ export default function Home() {
             <div>
               <h3 className="font-medium text-neutral-900 mb-2">Supported Jurisdictions</h3>
               <ul className="list-disc pl-5 text-sm text-neutral-600 space-y-1">
-                <li>Mexico (Federal)</li>
+                <li>Mexico (Federal and State)</li>
                 <li>Switzerland (Federal and Cantonal)</li>
               </ul>
             </div>

@@ -174,11 +174,10 @@ async function createLegacyRunRaw(input: {
   versionDate?: string;
 }) {
   const allowedJurisdictions = new Set(['MEXICO', 'SWITZERLAND']);
-  const allowedLegalLevels = new Set(['FEDERAL', 'CANTONAL']);
   const allowedLanguages = new Set(['EN', 'ES', 'FR']);
 
   const jurisdiction = allowedJurisdictions.has(input.jurisdiction) ? input.jurisdiction : 'MEXICO';
-  const legalLevel = input.legalLevel && allowedLegalLevels.has(input.legalLevel) ? input.legalLevel : null;
+  const legalLevel = normalizeLegalLevelForJurisdiction(jurisdiction, input.legalLevel);
   const outputLanguage = input.language && allowedLanguages.has(input.language) ? input.language : 'EN';
 
   const analysisRunId = crypto.randomUUID();
@@ -205,6 +204,20 @@ async function createLegacyRunRaw(input: {
   );
 
   return { id: analysisRunId };
+}
+
+function normalizeLegalLevelForJurisdiction(jurisdiction: string, legalLevel?: string) {
+  if (!legalLevel) return null;
+
+  const allowedByJurisdiction: Record<string, Set<string>> = {
+    MEXICO: new Set(['FEDERAL', 'STATE']),
+    SWITZERLAND: new Set(['FEDERAL', 'CANTONAL']),
+  };
+
+  const allowedLevels = allowedByJurisdiction[jurisdiction];
+  if (!allowedLevels) return null;
+
+  return allowedLevels.has(legalLevel) ? legalLevel : null;
 }
 
 type GeminiModelListResponse = {
@@ -559,7 +572,7 @@ app.post('/api/analyses', async (req, res) => {
   try {
     const {
       jurisdiction,
-      legalLevel,
+      legalLevel: requestedLegalLevel,
       language,
       sourceText,
       versionDate,
@@ -578,10 +591,12 @@ app.post('/api/analyses', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    const legalLevel = normalizeLegalLevelForJurisdiction(jurisdiction, requestedLegalLevel);
+
     const createLegacyRun = async () => {
       const legacyRun = await createLegacyRunRaw({
         jurisdiction,
-        legalLevel,
+        legalLevel: legalLevel ?? undefined,
         language,
         sourceText,
         versionDate,
@@ -589,7 +604,7 @@ app.post('/api/analyses', async (req, res) => {
 
       void processAnalysisInBackground(legacyRun, {
         jurisdiction,
-        legalLevel,
+        legalLevel: legalLevel ?? undefined,
         language,
         sourceText,
       });
@@ -755,7 +770,7 @@ app.post('/api/analyses', async (req, res) => {
     // 2. Trigger analysis asynchronously and respond immediately.
     void processAnalysisInBackground(analysisRun, {
       jurisdiction,
-      legalLevel,
+      legalLevel: legalLevel ?? undefined,
       language,
       sourceText,
     });

@@ -173,18 +173,36 @@ async function createLegacyRunRaw(input: {
   sourceText: string;
   versionDate?: string;
 }) {
+  const allowedJurisdictions = new Set(['MEXICO', 'SWITZERLAND']);
+  const allowedLegalLevels = new Set(['FEDERAL', 'CANTONAL']);
+  const allowedLanguages = new Set(['EN', 'ES', 'FR']);
+
+  const jurisdiction = allowedJurisdictions.has(input.jurisdiction) ? input.jurisdiction : 'MEXICO';
+  const legalLevel = input.legalLevel && allowedLegalLevels.has(input.legalLevel) ? input.legalLevel : null;
+  const outputLanguage = input.language && allowedLanguages.has(input.language) ? input.language : 'EN';
+
   const analysisRunId = crypto.randomUUID();
   const sourceDocumentId = crypto.randomUUID();
 
-  await prisma.$executeRaw`
-    INSERT INTO "AnalysisRun" ("id","jurisdiction","legalLevel","outputLanguage","status","createdAt","updatedAt")
-    VALUES (${analysisRunId}, ${input.jurisdiction}, ${input.legalLevel || null}, ${input.language || 'EN'}, ${'PROCESSING'}, NOW(), NOW())
-  `;
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "AnalysisRun" ("id","jurisdiction","legalLevel","outputLanguage","status","createdAt","updatedAt")
+     VALUES ($1, CAST($2 AS "Jurisdiction"), CAST($3 AS "LegalLevel"), CAST($4 AS "OutputLanguage"), $5, NOW(), NOW())`,
+    analysisRunId,
+    jurisdiction,
+    legalLevel,
+    outputLanguage,
+    'PROCESSING',
+  );
 
-  await prisma.$executeRaw`
-    INSERT INTO "SourceDocument" ("id","analysisRunId","sourceType","content","versionDate")
-    VALUES (${sourceDocumentId}, ${analysisRunId}, ${'TEXT'}, ${input.sourceText}, ${input.versionDate || null})
-  `;
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "SourceDocument" ("id","analysisRunId","sourceType","content","versionDate")
+     VALUES ($1, $2, $3, $4, $5)`,
+    sourceDocumentId,
+    analysisRunId,
+    'TEXT',
+    input.sourceText,
+    input.versionDate || null,
+  );
 
   return { id: analysisRunId };
 }

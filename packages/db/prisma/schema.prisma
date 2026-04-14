@@ -36,10 +36,25 @@ model AnalysisRun {
   id             String         @id @default(uuid())
   projectId      String?
   project        Project?       @relation(fields: [projectId], references: [id])
+  canonicalDocumentId String?
+  canonicalDocument CanonicalDocument? @relation("DocumentRuns", fields: [canonicalDocumentId], references: [id])
   jurisdiction   Jurisdiction
   legalLevel     LegalLevel?
   outputLanguage OutputLanguage
   status         String
+  isCurrent      Boolean        @default(false)
+  isPubliclyVisible Boolean     @default(true)
+  triggerType    String?
+  inputMetadata  Json?
+  analysisOutput Json?
+  errorLog       String?
+  processingTimeMs Int?
+  modelVersion   String?
+  promptVersion  String?
+  createdByUserId String?
+  createdBySessionId String?
+  deletedAt      DateTime?
+  adminNotes     String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -47,6 +62,50 @@ model AnalysisRun {
   dashboardSummaries DashboardSummary[]
   heatmapRecords     HeatmapRecord[]
   findingCards       StructuredFindingCard[]
+  currentForDocuments CanonicalDocument[] @relation("CurrentRun")
+  usageEvents UsageEvent[]
+}
+
+model CanonicalDocument {
+  id                   String       @id @default(uuid())
+  country              String?
+  subnationalUnit      String?
+  jurisdiction         Jurisdiction
+  legalLevel           LegalLevel?
+  documentType         String?
+  titleOriginal        String?
+  titleNormalized      String
+  lawDate              String?
+  publicationDate      String?
+  sourceUrl            String?
+  documentHash         String?
+  language             OutputLanguage
+  isPublic             Boolean      @default(true)
+  currentAnalysisRunId String?
+  currentAnalysisRun   AnalysisRun? @relation("CurrentRun", fields: [currentAnalysisRunId], references: [id])
+  runs                 AnalysisRun[] @relation("DocumentRuns")
+  usageEvents          UsageEvent[]
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@index([jurisdiction, titleNormalized, lawDate])
+}
+
+model UsageEvent {
+  id                  String            @id @default(uuid())
+  userId              String?
+  sessionId           String?
+  canonicalDocumentId String?
+  canonicalDocument   CanonicalDocument? @relation(fields: [canonicalDocumentId], references: [id])
+  analysisRunId       String?
+  analysisRun         AnalysisRun?      @relation(fields: [analysisRunId], references: [id])
+  eventType           String
+  countryHint         String?
+  ipHash              String?
+  userAgent           String?
+  createdAt           DateTime          @default(now())
+
+  @@index([eventType, createdAt])
 }
 
 model SourceDocument {

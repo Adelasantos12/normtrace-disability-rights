@@ -7,7 +7,7 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['"JetBrains Mono"', 'monospace'],
       },
       colors: {
         institutional: {

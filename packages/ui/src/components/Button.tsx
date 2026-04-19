@@ -18,7 +18,7 @@ export function Button({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`px-4 py-2 font-medium bg-neutral-900 text-white rounded hover:bg-neutral-800 disabled:opacity-50 transition-colors ${className}`}
+      className={`px-4 py-2 font-medium bg-[#171717] text-white rounded-md hover:bg-[#262626] disabled:opacity-50 transition-colors shadow-sm ${className}`}
     >
       {children}
     </button>

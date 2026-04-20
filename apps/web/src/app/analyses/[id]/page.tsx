@@ -44,6 +44,13 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
+    const hasRenderableResults = (data: AnalysisData) =>
+      Boolean(
+        (data.dashboardSummaries && data.dashboardSummaries.length > 0) ||
+        (data.heatmapRecords && data.heatmapRecords.length > 0) ||
+        (data.findingCards && data.findingCards.length > 0)
+      );
+
     const fetchAnalysis = async () => {
       try {
         const res = await fetch(apiUrl(`/api/analyses/${params.id}`));
@@ -60,11 +67,15 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
           throw new Error(message);
         }
         const data = await res.json();
-        setAnalysis(data.analysis);
+        const nextAnalysis = data.analysis as AnalysisData;
+        setAnalysis(nextAnalysis);
 
-        // Stop polling if the status is terminal
-        if (["COMPLETED", "FAILED", "COMPLETED_MOCK"].includes(data.analysis.status)) {
-           clearInterval(interval);
+        const isTerminalStatus = ["COMPLETED", "FAILED", "COMPLETED_MOCK", "SUPERSEDED"].includes(nextAnalysis.status);
+        const shouldStopPolling = isTerminalStatus || hasRenderableResults(nextAnalysis);
+
+        // Stop polling once we have a terminal status OR renderable results.
+        if (shouldStopPolling) {
+          clearInterval(interval);
         }
       } catch (err: any) {
         setError(err.message);
@@ -96,13 +107,18 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
     return <div className="p-12 text-center text-red-500">Error: {error || "Analysis not found"}</div>;
   }
 
+  const hasResults =
+    Boolean(analysis.dashboardSummaries?.length) ||
+    Boolean(analysis.heatmapRecords?.length) ||
+    Boolean(analysis.findingCards?.length);
+
   const tabs = [
     {
       id: "overview",
       label: "Overview Dashboard",
       content: (
         <div className="space-y-6">
-          {analysis.status === "PROCESSING" && (
+          {analysis.status === "PROCESSING" && !hasResults && (
             <div className="p-4 bg-blue-50 border border-blue-200 text-blue-800 rounded animate-pulse text-sm flex items-center">
               <span className="mr-2 border-2 border-blue-800 border-t-transparent w-4 h-4 rounded-full animate-spin"></span>
               Analysis in progress... Results will update automatically.

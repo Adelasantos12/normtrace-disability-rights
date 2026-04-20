@@ -4,6 +4,10 @@
 
 This repository implements the pilot phase focusing on Disability Rights (CRPD) for Mexico and Switzerland.
 
+Current legal-level filter support:
+- Mexico: Federal and State
+- Switzerland: Federal and Cantonal
+
 ## Project Structure (Monorepo)
 
 - `apps/web`: Next.js App Router frontend application.
@@ -53,7 +57,10 @@ This application is designed for seamless deployment on Railway using a Monorepo
 
 1. Connect your GitHub repository to a new Railway project.
 2. Add a **PostgreSQL** add-on to the project.
-3. Deploy two distinct services from the same repository:
+3. Deploy the monorepo as three Railway components in one project:
+   - PostgreSQL database service (Railway add-on)
+   - API service
+   - Web service
 
 #### API Service Configuration
 - **Root Directory**: `/` (Leave empty to use monorepo context)

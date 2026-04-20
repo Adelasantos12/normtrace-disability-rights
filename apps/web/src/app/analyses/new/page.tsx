@@ -14,7 +14,7 @@ declare global {
 export default function NewAnalysisPage() {
   const router = useRouter();
   const [jurisdiction, setJurisdiction] = useState<"MEXICO" | "SWITZERLAND" | "">("");
-  const [legalLevel, setLegalLevel] = useState<"FEDERAL" | "CANTONAL" | "">("");
+  const [legalLevel, setLegalLevel] = useState<"FEDERAL" | "STATE" | "CANTONAL" | "">("");
   const [language, setLanguage] = useState<"EN" | "ES" | "FR">("EN");
   const [sourceText, setSourceText] = useState("");
   const [pdfFileName, setPdfFileName] = useState("");
@@ -70,7 +70,7 @@ export default function NewAnalysisPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!jurisdiction) return;
-    if (jurisdiction === "SWITZERLAND" && !legalLevel) return;
+    if (!legalLevel) return;
     if (!sourceText.trim()) {
       alert("Please provide the source text or upload a PDF.");
       return;
@@ -84,7 +84,7 @@ export default function NewAnalysisPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jurisdiction,
-          legalLevel: jurisdiction === "SWITZERLAND" ? legalLevel : undefined,
+          legalLevel,
           language,
           sourceText,
           versionDate,
@@ -135,7 +135,10 @@ export default function NewAnalysisPage() {
               <select
                 className="w-full border border-neutral-300 rounded p-2 text-sm bg-white"
                 value={jurisdiction}
-                onChange={(e) => setJurisdiction(e.target.value as any)}
+                onChange={(e) => {
+                  setJurisdiction(e.target.value as any);
+                  setLegalLevel("");
+                }}
                 required
               >
                 <option value="" disabled>Select jurisdiction...</option>
@@ -144,7 +147,7 @@ export default function NewAnalysisPage() {
               </select>
             </div>
 
-            {jurisdiction === "SWITZERLAND" && (
+            {jurisdiction && (
               <div>
                 <label className="block text-sm font-medium mb-2">Legal Level</label>
                 <select
@@ -155,7 +158,8 @@ export default function NewAnalysisPage() {
                 >
                   <option value="" disabled>Select legal level...</option>
                   <option value="FEDERAL">Federal</option>
-                  <option value="CANTONAL">Cantonal</option>
+                  {jurisdiction === "MEXICO" && <option value="STATE">State</option>}
+                  {jurisdiction === "SWITZERLAND" && <option value="CANTONAL">Cantonal</option>}
                 </select>
               </div>
             )}

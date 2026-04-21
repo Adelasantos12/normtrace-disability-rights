@@ -25,7 +25,7 @@ export default function Home() {
           </Link>
         </section>
 
-        <section className="bg-neutral-50 border border-neutral-200 p-6 rounded-md">
+        <section className="bg-white border border-neutral-200 p-8 rounded-xl shadow-sm">
           <h2 className="text-lg font-medium mb-4 text-neutral-800">Current Scope Limitations</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -45,20 +45,20 @@ export default function Home() {
           </div>
         </section>
 
-        <div className="pt-4 flex gap-4">
+        <div className="pt-8 flex gap-6">
           <Link href="/analyses/new">
             <Button className="text-lg px-8 py-3">Start Analysis</Button>
           </Link>
           <Link href="/analyses">
-            <Button className="text-lg px-8 py-3 bg-white text-neutral-900 border border-neutral-300 hover:bg-neutral-50">
+            <Button variant="secondary" className="text-lg px-8 py-3">
               View Saved Analyses
             </Button>
           </Link>
         </div>
       </main>
 
-      <footer className="mt-20 pt-8 border-t border-neutral-200 text-sm text-neutral-500">
-        <p>NormTrace v2.0.0 · <a href="https://doi.org/10.5281/zenodo.19452837" target="_blank" rel="noopener noreferrer" className="hover:underline">Zenodo DOI</a></p>
+      <footer className="mt-20 pt-8 border-t border-neutral-200 text-sm text-neutral-500 font-mono text-xs">
+        <p>NormTrace v2.1.0 (Apr 21, 2026) · <a href="https://doi.org/10.5281/zenodo.19676921" target="_blank" rel="noopener noreferrer" className="hover:underline">Zenodo DOI</a></p>
         <p className="mt-1">Repository-based AI-assisted system for multilevel normative analysis.</p>
       </footer>
     </div>

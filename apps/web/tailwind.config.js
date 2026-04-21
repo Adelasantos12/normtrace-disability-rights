@@ -8,6 +8,7 @@ module.exports = {
     extend: {
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
+        mono: ['var(--font-jetbrains-mono)', 'monospace'],
       },
       colors: {
         institutional: {

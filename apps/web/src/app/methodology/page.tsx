@@ -26,16 +26,16 @@ export default function MethodologyPage() {
 
         <section>
           <h2 className="text-2xl font-medium mb-4">Citation & About</h2>
-          <div className="prose text-neutral-700 max-w-none bg-neutral-50 p-6 rounded-md border border-neutral-200">
-            <p className="mb-2"><strong>Version:</strong> v2.0.0</p>
+          <div className="prose text-neutral-700 max-w-none bg-neutral-50 p-6 rounded-md border border-neutral-200 font-mono text-sm">
+            <p className="mb-2"><strong>Version:</strong> v2.1.0</p>
             <p className="mb-2">
-              <strong>All Versions DOI:</strong> <a href="https://doi.org/10.5281/zenodo.19452836" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://doi.org/10.5281/zenodo.19452836</a>
+              <strong>All Versions DOI:</strong> <a href="https://doi.org/10.5281/zenodo.19676921" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://doi.org/10.5281/zenodo.19676921</a>
             </p>
             <p className="mb-4">
               <strong>Citation:</strong><br />
-              <span className="italic">Santos-Domínguez, A. B. (2026). NormTrace (v2.0.0). Zenodo. <a href="https://doi.org/10.5281/zenodo.19452837" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://doi.org/10.5281/zenodo.19452837</a></span>
+              <span className="italic">Santos-Domínguez, A. B. (2026). NormTrace-CRPD: A systematic tool for assessing domestic normative alignment with the Convention on the Rights of Persons with Disabilities (v2.1.0). Zenodo. <a href="https://doi.org/10.5281/zenodo.19676921" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">https://doi.org/10.5281/zenodo.19676921</a></span>
             </p>
-            <p className="text-sm italic text-neutral-600 mb-0">
+            <p className="text-xs italic text-neutral-600 mb-0">
               Note: This tool supports structured legal and policy analysis, but it does not replace expert legal review or jurisdiction-specific professional advice.
             </p>
           </div>

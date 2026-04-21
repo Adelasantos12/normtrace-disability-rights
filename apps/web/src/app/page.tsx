@@ -5,15 +5,15 @@ export default function Home() {
   return (
     <div className="max-w-4xl mx-auto px-6 py-12 text-neutral-900">
       <header className="mb-12 border-b border-neutral-200 pb-8">
-        <h1 className="uppercase tracking-widest text-3xl font-medium mb-6">NormTrace</h1>
-        <p className="text-lg text-neutral-600 leading-relaxed">
+        <h1 className="text-4xl font-semibold mb-4 tracking-tight">NormTrace</h1>
+        <p className="text-xl text-neutral-600 font-light max-w-2xl">
           Repository-based, AI-assisted analytical system for examining how domestic legal frameworks align with international standards.
         </p>
       </header>
 
       <main className="space-y-12">
         <section>
-          <h2 className="text-xl font-medium uppercase tracking-wide mb-4">Methodological Overview</h2>
+          <h2 className="text-2xl font-medium mb-4">Methodological Overview</h2>
           <p className="mb-4 leading-relaxed text-neutral-700">
             NormTrace evaluates normative alignment, legal compatibility, institutional anchoring, and implementation-oriented gaps. It treats normative silence as analytically meaningful and uses structured multi-layered analysis.
           </p>
@@ -50,15 +50,15 @@ export default function Home() {
             <Button className="text-lg px-8 py-3">Start Analysis</Button>
           </Link>
           <Link href="/analyses">
-            <Button className="text-lg px-8 py-3 bg-white text-neutral-900 border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 shadow-sm rounded-md">
+            <Button variant="secondary" className="text-lg px-8 py-3">
               View Saved Analyses
             </Button>
           </Link>
         </div>
       </main>
 
-      <footer className="mt-20 pt-8 border-t border-neutral-200 text-sm text-neutral-500">
-        <p>NormTrace v2.0.0 · <a href="https://doi.org/10.5281/zenodo.19452837" target="_blank" rel="noopener noreferrer" className="hover:underline">Zenodo DOI</a></p>
+      <footer className="mt-20 pt-8 border-t border-neutral-200 text-sm text-neutral-500 font-mono text-xs">
+        <p>NormTrace v2.1.0 (Apr 21, 2026) · <a href="https://doi.org/10.5281/zenodo.19676921" target="_blank" rel="noopener noreferrer" className="hover:underline">Zenodo DOI</a></p>
         <p className="mt-1">Repository-based AI-assisted system for multilevel normative analysis.</p>
       </footer>
     </div>

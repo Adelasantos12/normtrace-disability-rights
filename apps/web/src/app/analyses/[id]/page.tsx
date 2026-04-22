@@ -12,30 +12,24 @@ interface AnalysisData {
   sourceDocument?: {
     sourceType: string;
   };
-  structuredFindings?: Array<{
-    mainProblem: string;
-    gapType: string;
-    likelyRemedialLevel: string;
-    methodologicalCaution: string;
+  dashboardSummaries?: Array<{
+    dimension: string;
+    value: string;
+    explanation: string;
   }>;
-  actorRecords?: Array<{
-    actorName: string;
-    role: string;
-    responsibilityFlow: string;
-    enforceability: string;
+  heatmapRecords?: Array<{
+    domesticProvision: string;
+    crpdArticle: string;
+    alignmentType: string;
+    evidenceExcerpt: string;
+    analyticalNote: string;
   }>;
-  gapRecords?: Array<{
+  findingCards?: Array<{
+    title: string;
+    category: string;
+    significance: string;
+    legalExcerpt: string;
     standardEngaged: string;
-    severity: string;
-    interpretiveBasis: string;
-    caution: string;
-  }>;
-  argumentRecords?: Array<{
-    legalProblem: string;
-    standardEngaged: string;
-    deficiencyType: string;
-    doctrinalSupport: string;
-    remedialPathway: string;
   }>;
 }
 
@@ -43,22 +37,36 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedEvidence, setSelectedEvidence] = useState<any>(null);
 
   useEffect(() => {
+    let interval: NodeJS.Timeout;
+
     const fetchAnalysis = async () => {
       try {
         const res = await fetch(`/api/analyses/${params.id}`);
         if (!res.ok) throw new Error("Failed to load analysis");
         const data = await res.json();
         setAnalysis(data.analysis);
+
+        // Stop polling if the status is terminal
+        if (["COMPLETED", "FAILED", "COMPLETED_MOCK"].includes(data.analysis.status)) {
+           clearInterval(interval);
+        }
       } catch (err: any) {
         setError(err.message);
+        clearInterval(interval); // Stop on error too
       } finally {
         setLoading(false);
       }
     };
 
     fetchAnalysis();
+
+    // Poll every 5 seconds
+    interval = setInterval(fetchAnalysis, 5000);
+
+    return () => clearInterval(interval);
   }, [params.id]);
 
   if (loading) {
@@ -69,214 +77,190 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
     return <div className="p-12 text-center text-red-500">Error: {error || "Analysis not found"}</div>;
   }
 
-  const finding = analysis.structuredFindings?.[0];
-
   const tabs = [
     {
-      id: "executive",
-      label: "Executive Summary",
+      id: "overview",
+      label: "Overview Dashboard",
+      content: (
+        <div className="space-y-6">
+          {analysis.status === "PROCESSING" && (
+            <div className="p-4 bg-blue-50 border border-blue-200 text-blue-800 rounded animate-pulse text-sm flex items-center">
+              <span className="mr-2 border-2 border-blue-800 border-t-transparent w-4 h-4 rounded-full animate-spin"></span>
+              Analysis in progress... Results will update automatically.
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Card>
+              <h3 className="font-medium mb-2 text-sm text-neutral-500 uppercase tracking-wide">Context</h3>
+              <div className="text-sm space-y-1">
+                <div><span className="font-semibold">Jurisdiction:</span> {analysis.jurisdiction}</div>
+                <div><span className="font-semibold">Level:</span> {analysis.legalLevel || 'N/A'}</div>
+                <div><span className="font-semibold">Status:</span> {analysis.status}</div>
+              </div>
+            </Card>
+
+            {analysis.dashboardSummaries?.map((summary, idx) => (
+              <Card key={idx}>
+                <h3 className="font-medium mb-2 text-sm text-neutral-500 uppercase tracking-wide">{summary.dimension}</h3>
+                <div className="text-lg font-semibold text-institutional-900 mb-2">{summary.value}</div>
+                <p className="text-xs text-neutral-600">{summary.explanation}</p>
+              </Card>
+            ))}
+          </div>
+
+          <Card>
+            <h3 className="font-medium mb-4 text-amber-800">Methodological Note</h3>
+            <p className="text-sm text-neutral-600 leading-relaxed">
+              These outputs are analytical and indicative. The findings suggest areas of partial alignment or potential implementation gaps based on textual analysis. They do not constitute definitive legal judgments and should be verified against primary sources.
+            </p>
+          </Card>
+        </div>
+      )
+    },
+    {
+      id: "heatmap",
+      label: "Alignment Heatmap",
       content: (
         <div className="space-y-6">
           <Card>
-            <h3 className="font-medium mb-4">Analysis Context</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-neutral-500 block">Jurisdiction</span>
-                <span className="font-medium">{analysis.jurisdiction}</span>
-              </div>
-              <div>
-                <span className="text-neutral-500 block">Legal Level</span>
-                <span className="font-medium">{analysis.legalLevel || 'N/A'}</span>
-              </div>
-              <div>
-                <span className="text-neutral-500 block">Status</span>
-                <span className="font-medium">{analysis.status}</span>
-              </div>
+            <h3 className="font-medium mb-4">Normative Matrix</h3>
+            <p className="text-sm text-neutral-600 mb-6">Select a cell to view supporting evidence and analytical notes.</p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs text-neutral-700 uppercase bg-neutral-50 border-b border-neutral-200">
+                  <tr>
+                    <th scope="col" className="px-6 py-3">Domestic Provision</th>
+                    <th scope="col" className="px-6 py-3">CRPD Standard</th>
+                    <th scope="col" className="px-6 py-3">Alignment Type</th>
+                    <th scope="col" className="px-6 py-3 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analysis.heatmapRecords?.map((record, idx) => (
+                    <tr key={idx} className="bg-white border-b border-neutral-100 hover:bg-neutral-50">
+                      <td className="px-6 py-4 font-medium text-neutral-900">{record.domesticProvision}</td>
+                      <td className="px-6 py-4">{record.crpdArticle}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold
+                          ${record.alignmentType?.toLowerCase().includes('strong') ? 'bg-green-100 text-green-800' :
+                            record.alignmentType?.toLowerCase().includes('partial') ? 'bg-amber-100 text-amber-800' :
+                            record.alignmentType?.toLowerCase().includes('silence') || record.alignmentType?.toLowerCase().includes('gap') ? 'bg-red-100 text-red-800' :
+                            'bg-neutral-100 text-neutral-800'}`}>
+                          {record.alignmentType}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => setSelectedEvidence(record)}
+                          className="text-institutional-600 hover:text-institutional-900 font-medium text-xs underline"
+                          aria-label={`View evidence for ${record.domesticProvision}`}
+                        >
+                          View Evidence
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {(!analysis.heatmapRecords || analysis.heatmapRecords.length === 0) && (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-4 text-center text-neutral-500 italic">No heatmap data available yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </Card>
 
-          {finding && (
+          {selectedEvidence && (
             <Card>
-              <h3 className="font-medium mb-4 text-institutional-800">Generated Findings</h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-medium text-institutional-900">Evidence Drawer</h3>
+                <button
+                  onClick={() => setSelectedEvidence(null)}
+                  className="text-neutral-400 hover:text-neutral-700"
+                  aria-label="Close evidence drawer"
+                >
+                  ✕ Close
+                </button>
+              </div>
               <div className="space-y-4 text-sm">
                 <div>
-                  <span className="font-semibold block text-neutral-700">Main Problem:</span>
-                  <p className="text-neutral-600 mt-1">{finding.mainProblem}</p>
+                  <span className="font-semibold block text-neutral-700">Provision:</span>
+                  <p className="text-neutral-600">{selectedEvidence.domesticProvision}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="font-semibold block text-neutral-700">Gap Type:</span>
-                    <p className="text-neutral-600 mt-1">{finding.gapType}</p>
-                  </div>
-                  <div>
-                    <span className="font-semibold block text-neutral-700">Remedial Level:</span>
-                    <p className="text-neutral-600 mt-1">{finding.likelyRemedialLevel}</p>
-                  </div>
+                <div>
+                  <span className="font-semibold block text-neutral-700">Relevant Standard:</span>
+                  <p className="text-neutral-600">{selectedEvidence.crpdArticle}</p>
                 </div>
-                {finding.methodologicalCaution && (
-                  <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded text-amber-800">
-                    <span className="font-semibold block mb-1">Methodological Caution:</span>
-                    {finding.methodologicalCaution}
-                  </div>
-                )}
+                <div className="bg-neutral-50 p-4 border border-neutral-200 rounded-md">
+                  <span className="font-semibold block text-neutral-700 mb-2">Legal Excerpt:</span>
+                  <p className="text-neutral-800 font-serif italic">&quot;{selectedEvidence.evidenceExcerpt}&quot;</p>
+                </div>
+                <div>
+                  <span className="font-semibold block text-neutral-700">Analytical Note:</span>
+                  <p className="text-neutral-600 leading-relaxed">{selectedEvidence.analyticalNote}</p>
+                </div>
               </div>
             </Card>
           )}
-
-          <Card>
-            <h3 className="font-medium mb-4 text-amber-800">General Caution</h3>
-            <p className="text-sm text-neutral-600 leading-relaxed mb-4">
-              This analysis evaluates the formal properties, enforceability structure, and normative alignment of the text against the CRPD. It uses a cautious approach. Outputs require source verification and are strictly analytical.
-            </p>
-            <p className="text-xs text-neutral-500 italic border-l-2 border-amber-300 pl-3">
-              These outputs are analytical and indicative. For high-stakes use—such as litigation, legislative reform, advocacy strategy, official reporting, or institutional decision-making—findings should be reviewed against primary legal sources and, where necessary, complemented by detailed expert analysis.
-            </p>
-          </Card>
         </div>
       )
     },
     {
-      id: "structure",
-      label: "Structure",
+      id: "findings",
+      label: "Structured Findings",
       content: (
         <div className="space-y-6">
-          <Card>
-            <h3 className="font-medium mb-4">Anatomy & Actor Map</h3>
-            <p className="text-sm text-neutral-600 mb-4">The structural analysis maps responsibility flow and enforceability.</p>
-            {analysis.actorRecords && analysis.actorRecords.length > 0 ? (
-              <div className="space-y-4">
-                {analysis.actorRecords.map((actor, idx) => (
-                  <div key={idx} className="p-4 border border-neutral-200 rounded-md">
-                    <div className="font-semibold text-neutral-800">{actor.actorName} <span className="text-neutral-500 font-normal">({actor.role})</span></div>
-                    <div className="mt-2 text-sm text-neutral-600">
-                      <span className="font-medium block">Responsibility Flow:</span> {actor.responsibilityFlow}
-                    </div>
-                    <div className="mt-2 text-sm text-neutral-600">
-                      <span className="font-medium block">Enforceability:</span> {actor.enforceability}
-                    </div>
+          {analysis.findingCards?.map((card, idx) => (
+            <Card key={idx}>
+              <div className="flex flex-col md:flex-row gap-6">
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="bg-institutional-100 text-institutional-800 text-xs px-2 py-1 rounded font-semibold uppercase tracking-wider">{card.category}</span>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-neutral-500 italic">No actor records available.</p>
-            )}
-          </Card>
-        </div>
-      )
-    },
-    {
-      id: "exclusions",
-      label: "Exclusions",
-      content: (
-        <div className="space-y-6">
-          <Card>
-            <h3 className="font-medium mb-4">Exclusion Analysis</h3>
-            <p className="text-sm text-neutral-600 mb-4">Maps normative silence, intersectionality, and implicit barriers.</p>
-            {analysis.gapRecords && analysis.gapRecords.length > 0 ? (
-              <div className="space-y-4">
-                {analysis.gapRecords.map((gap, idx) => (
-                  <div key={idx} className="p-4 border border-neutral-200 rounded-md">
-                    <div className="font-semibold text-neutral-800">Gap: <span className="font-normal">{gap.standardEngaged}</span></div>
-                    <div className="mt-2 text-sm text-neutral-600">
-                      <span className="font-medium block">Severity:</span> {gap.severity}
-                    </div>
-                    <div className="mt-2 text-sm text-neutral-600">
-                      <span className="font-medium block">Interpretive Basis:</span> {gap.interpretiveBasis}
-                    </div>
-                    {gap.caution && (
-                      <div className="mt-2 text-sm text-amber-700 bg-amber-50 p-2 rounded">
-                        <span className="font-medium">Caution:</span> {gap.caution}
-                      </div>
-                    )}
+                  <h3 className="text-lg font-semibold text-neutral-900">{card.title}</h3>
+                  <div>
+                    <span className="font-semibold block text-sm text-neutral-700">Significance for Implementation:</span>
+                    <p className="text-sm text-neutral-600 mt-1">{card.significance}</p>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-neutral-500 italic">No exclusion records available.</p>
-            )}
-          </Card>
-        </div>
-      )
-    },
-    {
-      id: "conventionality",
-      label: "Conventionality Control",
-      content: (
-        <div className="space-y-6">
-          <Card>
-            <h3 className="font-medium mb-4">Conventionality Analysis</h3>
-            <p className="text-sm text-neutral-600 mb-4">Comparison of the domestic legal framework with international standards (CRPD) using the constitutional parameter of rights review.</p>
-            {analysis.gapRecords && analysis.gapRecords.length > 0 ? (
-              <div className="space-y-4">
-                {analysis.gapRecords.map((gap, idx) => (
-                  <div key={idx} className="p-4 border border-neutral-200 rounded-md">
-                    <div className="font-semibold text-neutral-800">Standard: <span className="font-normal">{gap.standardEngaged}</span></div>
-                    <div className="mt-2 text-sm text-neutral-600">
-                      <span className="font-medium block">Severity:</span> {gap.severity}
-                    </div>
+                  <div>
+                    <span className="font-semibold block text-sm text-neutral-700">Standard Engaged:</span>
+                    <p className="text-sm text-neutral-600 mt-1">{card.standardEngaged}</p>
                   </div>
-                ))}
+                </div>
+                <div className="flex-1 bg-neutral-50 p-4 border border-neutral-200 rounded-md self-start">
+                  <span className="font-semibold block text-xs text-neutral-500 uppercase tracking-wide mb-2">Supporting Excerpt</span>
+                  <p className="text-sm text-neutral-800 font-serif italic">&quot;{card.legalExcerpt}&quot;</p>
+                </div>
               </div>
-            ) : (
-              <p className="text-sm text-neutral-500 italic">No conventionality records available.</p>
-            )}
-          </Card>
+            </Card>
+          ))}
+          {(!analysis.findingCards || analysis.findingCards.length === 0) && (
+            <div className="p-8 text-center text-neutral-500 italic border border-dashed border-neutral-300 rounded-md">
+              No structured findings generated yet.
+            </div>
+          )}
         </div>
       )
     },
     {
-      id: "argumentation",
-      label: "Argumentation",
+      id: "data",
+      label: "Raw Data Export",
       content: (
         <div className="space-y-6">
           <Card>
-            <h3 className="font-medium mb-4">Structured Legal Arguments</h3>
-            <p className="text-sm text-neutral-600 mb-4">Translates findings into structured doctrinal pathways.</p>
-            {analysis.argumentRecords && analysis.argumentRecords.length > 0 ? (
-              <div className="space-y-4">
-                {analysis.argumentRecords.map((arg, idx) => (
-                  <div key={idx} className="p-4 border border-neutral-200 rounded-md">
-                    <div className="font-semibold text-neutral-800">Legal Problem: <span className="font-normal">{arg.legalProblem}</span></div>
-                    <div className="mt-2 text-sm text-neutral-600">
-                      <span className="font-medium block">Standard Engaged:</span> {arg.standardEngaged}
-                    </div>
-                    <div className="mt-2 text-sm text-neutral-600">
-                      <span className="font-medium block">Deficiency Type:</span> {arg.deficiencyType}
-                    </div>
-                    <div className="mt-2 text-sm text-neutral-600">
-                      <span className="font-medium block">Doctrinal Support:</span> {arg.doctrinalSupport}
-                    </div>
-                    <div className="mt-2 text-sm text-neutral-600">
-                      <span className="font-medium block">Remedial Pathway:</span> {arg.remedialPathway}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-neutral-500 italic">No argumentation records available.</p>
-            )}
-          </Card>
-        </div>
-      )
-    },
-    {
-      id: "coding",
-      label: "Coding Summary",
-      content: (
-        <div className="space-y-6">
-          <Card>
-            <h3 className="font-medium mb-4">Data Extract</h3>
-            <p className="text-sm text-neutral-600 mb-4">Structured fields for mixed-method research.</p>
+            <h3 className="font-medium mb-4">Structured Data Extract</h3>
+            <p className="text-sm text-neutral-600 mb-4">Data payload for programmatic export.</p>
             <div className="bg-neutral-50 p-4 rounded-md overflow-x-auto border border-neutral-200">
               <pre className="text-xs text-neutral-800 whitespace-pre-wrap font-mono">
                 {JSON.stringify({
                   id: analysis.id,
                   jurisdiction: analysis.jurisdiction,
                   legalLevel: analysis.legalLevel,
-                  structuredFindings: analysis.structuredFindings,
-                  actorRecords: analysis.actorRecords,
-                  gapRecords: analysis.gapRecords,
-                  argumentRecords: analysis.argumentRecords
+                  dashboardSummaries: analysis.dashboardSummaries,
+                  heatmapRecords: analysis.heatmapRecords,
+                  findingCards: analysis.findingCards
                 }, null, 2)}
               </pre>
             </div>
@@ -287,7 +271,7 @@ export default function AnalysisResultsPage({ params }: { params: { id: string }
   ];
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12 text-neutral-900">
+    <div className="max-w-6xl mx-auto px-6 py-12 text-neutral-900">
       <header className="mb-10 pb-6 border-b border-neutral-200">
         <Link href="/analyses" className="text-sm text-neutral-500 hover:text-neutral-800 mb-4 inline-block">
           &larr; Back to Saved Analyses

@@ -2,12 +2,17 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 dotenv.config({ path: '../../.env' }); // Load from root if possible
 
 const app = express();
 const port = process.env.PORT || 4000;
 const prisma = new PrismaClient();
+
+// Trust the proxy to ensure rate limiting works correctly behind Railway/Nginx
+app.set('trust proxy', 1);
 
 // Ensure Gemini API Key is available
 const geminiApiKey = process.env.GEMINI_API_KEY || '';
@@ -142,37 +147,34 @@ function buildAnalysisPrompt({
     Perform a normative analysis on the following legal text for jurisdiction: ${jurisdiction}.
     Legal Level: ${legalLevel || 'N/A'}.
     Focus on Disability Rights (CRPD).
-    Output language for every value in the JSON: ${outputLanguage}.
+
+    IMPORTANT: You must output ALL strings and text values in the JSON structure strictly in ${outputLanguage}. Do not use any other language for the values.
 
     Provide a JSON response with the following structure exactly (no markdown wrapping, just valid JSON):
     {
-      "mainProblem": "Description of the main legal/normative problem",
-      "gapType": "Type of normative gap (e.g., Exclusion, Contradiction)",
-      "likelyRemedialLevel": "Where it should be fixed (e.g., Federal Legislature)",
-      "methodologicalCaution": "Any cautions or limitations to this finding",
-      "actorRecords": [
+      "dashboardSummaries": [
         {
-          "actorName": "Name of the actor",
-          "role": "Role of the actor",
-          "responsibilityFlow": "How responsibility flows",
-          "enforceability": "Level of enforceability"
+          "dimension": "Analytical dimension (e.g., Normative coverage, Institutional anchoring, Clarity of responsibilities, Justiciability / enforceability, Inclusion and intersectionality, Implementation-relevant gaps, Normative silence / omissions)",
+          "value": "Brief descriptive status",
+          "explanation": "Short analytical explanation"
         }
       ],
-      "gapRecords": [
+      "heatmapRecords": [
         {
-          "standardEngaged": "The legal standard engaged",
-          "severity": "Severity of the gap",
-          "interpretiveBasis": "Interpretive basis for the gap",
-          "caution": "Methodological caution specific to this gap"
+          "domesticProvision": "The domestic provision or section",
+          "crpdArticle": "Linked CRPD article or theme",
+          "alignmentType": "Type of alignment (e.g., Strong anchoring, Partial anchoring, Indirect coverage, Ambiguous formulation, Normative silence / gap)",
+          "evidenceExcerpt": "Relevant excerpt from the text",
+          "analyticalNote": "Brief analytical note explaining the alignment or gap"
         }
       ],
-      "argumentRecords": [
+      "findingCards": [
         {
-          "legalProblem": "The specific legal problem",
-          "standardEngaged": "The relevant standard",
-          "deficiencyType": "Type of legal deficiency",
-          "doctrinalSupport": "Relevant doctrinal support",
-          "remedialPathway": "Possible remedial pathway"
+          "title": "Title of the finding",
+          "category": "Category (e.g., omission, ambiguity, weak enforceability, coordination gap)",
+          "significance": "Why it matters for implementation",
+          "legalExcerpt": "Supporting legal excerpt",
+          "standardEngaged": "Linked standard / CRPD reference"
         }
       ]
     }
@@ -209,39 +211,39 @@ async function processAnalysisInBackground(analysisRun: { id: string }, payload:
     const parsedFindings = JSON.parse(jsonStr);
 
     // Save findings
-    await prisma.structuredFinding.create({
-      data: {
-        analysisRunId: analysisRun.id,
-        mainProblem: parsedFindings.mainProblem,
-        gapType: parsedFindings.gapType,
-        likelyRemedialLevel: parsedFindings.likelyRemedialLevel,
-        methodologicalCaution: parsedFindings.methodologicalCaution,
-      }
-    });
-
-    if (parsedFindings.actorRecords && Array.isArray(parsedFindings.actorRecords)) {
-      await prisma.actorRecord.createMany({
-        data: parsedFindings.actorRecords.map((r: any) => ({
+    if (parsedFindings.dashboardSummaries && Array.isArray(parsedFindings.dashboardSummaries)) {
+      await prisma.dashboardSummary.createMany({
+        data: parsedFindings.dashboardSummaries.map((r: any) => ({
           analysisRunId: analysisRun.id,
-          ...r
+          dimension: r.dimension || 'Unknown',
+          value: r.value,
+          explanation: r.explanation
         }))
       });
     }
 
-    if (parsedFindings.gapRecords && Array.isArray(parsedFindings.gapRecords)) {
-      await prisma.gapRecord.createMany({
-        data: parsedFindings.gapRecords.map((r: any) => ({
+    if (parsedFindings.heatmapRecords && Array.isArray(parsedFindings.heatmapRecords)) {
+      await prisma.heatmapRecord.createMany({
+        data: parsedFindings.heatmapRecords.map((r: any) => ({
           analysisRunId: analysisRun.id,
-          ...r
+          domesticProvision: r.domesticProvision,
+          crpdArticle: r.crpdArticle,
+          alignmentType: r.alignmentType,
+          evidenceExcerpt: r.evidenceExcerpt,
+          analyticalNote: r.analyticalNote
         }))
       });
     }
 
-    if (parsedFindings.argumentRecords && Array.isArray(parsedFindings.argumentRecords)) {
-      await prisma.argumentRecord.createMany({
-        data: parsedFindings.argumentRecords.map((r: any) => ({
+    if (parsedFindings.findingCards && Array.isArray(parsedFindings.findingCards)) {
+      await prisma.structuredFindingCard.createMany({
+        data: parsedFindings.findingCards.map((r: any) => ({
           analysisRunId: analysisRun.id,
-          ...r
+          title: r.title || 'Untitled Finding',
+          category: r.category,
+          significance: r.significance,
+          legalExcerpt: r.legalExcerpt,
+          standardEngaged: r.standardEngaged
         }))
       });
     }
@@ -259,8 +261,41 @@ async function processAnalysisInBackground(analysisRun: { id: string }, payload:
   }
 }
 
-app.use(cors());
-app.use(express.json({ limit: '100mb' })); // Allow large text submissions
+app.use(helmet());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+app.use(limiter);
+
+const allowedOrigins = process.env.FRONTEND_URL
+  ? [process.env.FRONTEND_URL, 'http://localhost:3000']
+  : ['http://localhost:3000'];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl requests, or same-origin requests)
+    if (!origin) return callback(null, true);
+
+    // Check exact match
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+
+    // Check if it's a Railway app domain (fallback for production environments)
+    if (origin.endsWith('.railway.app') || origin.endsWith('.up.railway.app')) {
+      return callback(null, true);
+    }
+
+    const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+    return callback(new Error(msg), false);
+  }
+}));
+
+app.use(express.json({ limit: '10mb' })); // Allow large text submissions, but not memory-exhausting
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -328,10 +363,9 @@ app.get('/api/analyses/:id', async (req, res) => {
       where: { id: req.params.id },
       include: {
         sourceDocument: true,
-        structuredFindings: true,
-        gapRecords: true,
-        actorRecords: true,
-        argumentRecords: true
+        dashboardSummaries: true,
+        heatmapRecords: true,
+        findingCards: true
       }
     });
 

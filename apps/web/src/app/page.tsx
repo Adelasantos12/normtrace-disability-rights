@@ -58,8 +58,8 @@ export default function Home() {
       </main>
 
       <footer className="mt-20 pt-8 border-t border-neutral-200 text-sm text-neutral-500">
-        <p>NormTrace v2.0 Pilot • Repository-based AI-assisted system for multilevel normative analysis.</p>
-        <p className="mt-1">Current scope strictly limited to approved jurisdictions and disability rights.</p>
+        <p>NormTrace v2.0.0 · <a href="https://doi.org/10.5281/zenodo.19452837" target="_blank" rel="noopener noreferrer" className="hover:underline">Zenodo DOI</a></p>
+        <p className="mt-1">Repository-based AI-assisted system for multilevel normative analysis.</p>
       </footer>
     </div>
   );
